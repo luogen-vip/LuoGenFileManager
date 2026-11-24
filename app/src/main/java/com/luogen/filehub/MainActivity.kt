@@ -134,7 +134,7 @@ class NavStack {
 
 sealed class Screen {
     object Home : Screen()
-    data class List(val cat: com.luogen.filehub.model.Cat) : Screen()
+    data class CatList(val cat: com.luogen.filehub.model.Cat) : Screen()
     data class Browse(val dir: String) : Screen()
     data class ImageView(val paths: List<String>, val start: Int) : Screen()
     data class VideoView(val paths: List<String>, val start: Int) : Screen()

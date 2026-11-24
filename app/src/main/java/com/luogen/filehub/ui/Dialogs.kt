@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -178,7 +180,7 @@ fun DestPickerDialog(
                                 .padding(vertical = 10.dp, horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(androidx.compose.material.icons.Icons.Filled.Folder, null, tint = BrandBlue, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Filled.Folder, null, tint = BrandBlue, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(d.name, fontSize = 14.sp, maxLines = 1)
                         }

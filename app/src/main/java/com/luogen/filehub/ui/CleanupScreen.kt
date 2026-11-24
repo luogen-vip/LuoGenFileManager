@@ -86,7 +86,7 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                     }
                 }
             }
-            val cacheSize = FileOps.sizeOf(File(ctx.cacheDir))
+            val cacheSize = FileOps.sizeOf(ctx.cacheDir)
             if (cacheSize > 0) {
                 junkList.add(JunkItem(
                     FileItem(path = ctx.cacheDir.absolutePath, name = "应用缓存", size = cacheSize, isDir = true, modified = 0),
@@ -123,7 +123,7 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         bottomBar = {
             if (selected.isNotEmpty()) {
                 Surface(color = SurfaceDark) {
-                    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                         val selJunk = junk.filter { selected.contains(it.item.key) }
                         Button(
                             onClick = {

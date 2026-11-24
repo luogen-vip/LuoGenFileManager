@@ -8,7 +8,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -158,6 +158,7 @@ fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
 @Composable
 fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     if (paths.isEmpty()) return
     var index by remember { mutableStateOf(start.coerceIn(0, paths.size - 1)) }
     var playing by remember { mutableStateOf(false) }
@@ -192,7 +193,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                     target.outputStream().use { fos -> ins.copyTo(fos) }
                 }
                 Prefs.setCover(paths[index], target.absolutePath)
-                cover = Thumbs.load(ctx, target.absolutePath, false, 400)
+                scope.launch { cover = Thumbs.load(ctx, target.absolutePath, false, 400) }
                 toast = "封面已更新"
             } catch (_: Throwable) {
                 toast = "设置封面失败"
@@ -250,11 +251,8 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     val transition = rememberInfiniteTransition(label = "swirl")
     val angleAnim by transition.animateFloat(
         initialValue = 0f, targetValue = 360f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            animation = androidx.compose.animation.core.tween(
-                12000,
-                easing = androidx.compose.animation.core.LinearEasing
-            )
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 12000, easing = LinearEasing)
         ),
         label = "angle"
     )

@@ -16,7 +16,7 @@ fun AppNav(ctx: Context, nav: NavStack) {
     when (val s = nav.current) {
         is Screen.Home -> HomeScreen(ctx, nav, repo)
 
-        is Screen.List -> when (s.cat) {
+        is Screen.CatList -> when (s.cat) {
             Cat.CLEAN -> CleanupScreen(ctx, nav, repo)
             Cat.VAULT -> VaultScreen(ctx, nav, repo)
             Cat.FILE -> BrowseScreen(ctx, nav, repo, android.os.Environment.getExternalStorageDirectory().absolutePath)

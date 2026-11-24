@@ -36,6 +36,7 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TextViewerScreen(nav: NavStack, path: String) {
+    val ctx = LocalContext.current
     val file = remember(path) { File(path) }
     var text by remember(path) { mutableStateOf("") }
     var original by remember(path) { mutableStateOf("") }
@@ -108,7 +109,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                 !editable -> Column(Modifier.fillMaxSize().padding(20.dp)) {
                     Text("这个文件不是纯文本（或编码无法解析），无法在应用内编辑。", color = TextDim, fontSize = 13.sp)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { FileOps.openWith(LocalContext.current, path) }) { Text("用其他应用打开") }
+                    Button(onClick = { FileOps.openWith(ctx, path) }) { Text("用其他应用打开") }
                 }
                 editing -> OutlinedTextField(
                     value = text,
@@ -248,7 +249,7 @@ private fun PdfPage(renderer: PdfRenderer, index: Int, widthPx: Int, lock: Any) 
     var bmp by remember(index) { mutableStateOf<Bitmap?>(null) }
     var failed by remember(index) { mutableStateOf(false) }
     LaunchedEffect(index, widthPx) {
-        withContext(Dispatchers.IO) {
+        val page1: Bitmap? = withContext(Dispatchers.IO) {
             try {
                 synchronized(lock) {
                     renderer.openPage(index).use { page ->
@@ -257,13 +258,14 @@ private fun PdfPage(renderer: PdfRenderer, index: Int, widthPx: Int, lock: Any) 
                         val b = Bitmap.createBitmap(widthPx, h, Bitmap.Config.ARGB_8888)
                         b.eraseColor(AColor.WHITE)
                         page.render(b, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        withContext(Dispatchers.Main) { bmp = b }
+                        b
                     }
                 }
             } catch (_: Throwable) {
-                withContext(Dispatchers.Main) { failed = true }
+                null
             }
         }
+        if (page1 != null) bmp = page1 else failed = true
     }
     Column(Modifier.fillMaxWidth()) {
         Text("第 ${index + 1} 页", color = TextDim, fontSize = 11.sp)

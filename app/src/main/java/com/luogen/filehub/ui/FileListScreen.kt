@@ -561,7 +561,7 @@ private fun emptyText(cat: Cat): String = when (cat) {
     else -> "这里还没有内容"
 }
 
-private fun toggleSel(current: Set<String>, key: String, setter: (Set<String>) -> Unit) {
+internal fun toggleSel(current: Set<String>, key: String, setter: (Set<String>) -> Unit) {
     setter(if (current.contains(key)) current - key else current + key)
 }
 

@@ -135,7 +135,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                         onClick = {
                             when (cat) {
                                 Cat.VAULT -> nav.push(Screen.Vault)
-                                else -> nav.push(Screen.List(cat))
+                                else -> nav.push(Screen.CatList(cat))
                             }
                         }
                     )

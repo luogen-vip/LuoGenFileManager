@@ -119,7 +119,7 @@ object Thumbs {
                 ThumbnailUtils.createVideoThumbnail(File(path), Size(req, req), null)
             } else {
                 @Suppress("DEPRECATION")
-                ThumbnailUtils.createVideoThumbnail(path, ThumbnailUtils.MINI_KIND)
+                ThumbnailUtils.createVideoThumbnail(path, android.provider.MediaStore.Images.Thumbnails.MINI_KIND)
             }
         } catch (_: Throwable) {
             try {
