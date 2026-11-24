@@ -7,3 +7,6 @@ build/
 /captures
 .externalNativeBuild
 .cxx
+
+# 本地成品包目录
+release/
