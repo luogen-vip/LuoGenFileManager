@@ -17,7 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import com.luogen.filehub.MainActivity
+import com.luogen.filehub.ui.MainActivity
 import com.luogen.filehub.R
 import java.io.File
 
