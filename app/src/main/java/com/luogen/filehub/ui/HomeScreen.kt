@@ -41,9 +41,9 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val c = try { repo.counts() } catch (_: Throwable) { mapOf<Cat, Int>() }
-            val trash = TrashStore.list(ctx).size
-            val vault = VaultStore.list(ctx).size
-            val s = repo.storage()
+            val trash = try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 }
+            val vault = try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 }
+            val s = try { repo.storage() } catch (_: Throwable) { StorageInfo(1L, 0L) }
             withContext(Dispatchers.Main) {
                 counts = c + mapOf(Cat.TRASH to trash, Cat.VAULT to vault, Cat.CLEAN to 0)
                 storage = s
