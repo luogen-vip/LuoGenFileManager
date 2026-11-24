@@ -45,7 +45,7 @@ fun FtpScreen(ctx: Context, nav: NavStack) {
     var pass by remember { mutableStateOf(cfg.pass) }
     var anon by remember { mutableStateOf(cfg.anonymous) }
     var readOnly by remember { mutableStateOf(cfg.readOnly) }
-    var rootWhole by remember { mutableStateOf(cfg.root != File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath)) }
+    var rootWhole by remember { mutableStateOf(cfg.root != Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath) }
     var toast by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val running = FtpManager.running
