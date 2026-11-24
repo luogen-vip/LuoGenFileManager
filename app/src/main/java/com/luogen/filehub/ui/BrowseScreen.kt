@@ -137,6 +137,8 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
             val msg = try { block { p, m -> prog = Prog(title, p, m) } } catch (t: Throwable) { "失败：${t.message}" }
             prog = null
             toast = msg
+            AppState.countsDirty = true
+            AppState.cleanDirty = true
             refresh++
             selected = emptySet()
         }
@@ -335,12 +337,15 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                                         DropdownMenuItem(text = { Text("移入回收站") }, onClick = {
                                             menu = false
                                             toast = if (FileOps.deleteToTrash(ctx, listOf(item)) > 0) "已移入回收站" else "失败"
+                                            AppState.countsDirty = true
+                                            AppState.cleanDirty = true
                                             refresh++
                                         })
-                                        if (current.parentFile == null || current.absolutePath != "/") {
+                                        if (current.absolutePath != rootPath && current.parentFile != null) {
                                             DropdownMenuItem(text = { Text("上一级") }, onClick = {
                                                 menu = false
                                                 current.parentFile?.let { current = it }
+                                                AppState.countsDirty = true
                                             })
                                         }
                                     }

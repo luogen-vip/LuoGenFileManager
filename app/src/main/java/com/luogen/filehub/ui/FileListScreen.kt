@@ -480,7 +480,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                         onRename = { showRename = it },
                                         onMsg = { toast = it },
                                         onExtract = { extractApks(listOf(it0)) },
-                                        onRefresh = { AppState.drop(cacheKey); force++ }
+                                        onRefresh = { AppState.drop(cacheKey); AppState.countsDirty = true; force++ }
                                     )
                                 }
                             }
@@ -516,6 +516,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                 val err = FileOps.rename(item, newName)
                 toast = err ?: "已重命名"
                 AppState.drop(cacheKey)
+                AppState.countsDirty = true
                 force++
             }
         )
