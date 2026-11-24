@@ -8,7 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.os.storage.StorageManager
-import android.os.storage.StorageStatsManager
+import android.app.usage.StorageStatsManager
 import android.provider.MediaStore
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem

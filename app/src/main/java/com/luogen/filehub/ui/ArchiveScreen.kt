@@ -288,7 +288,7 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
 }
 
 @Composable
-private fun ActionItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun androidx.compose.foundation.layout.RowScope.ActionItem(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Column(
         Modifier
             .weight(1f)

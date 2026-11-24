@@ -105,19 +105,18 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
             )
-        }
+        },
         bottomBar = {
             Surface(color = SurfaceDark) {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    DocAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(FileItem(path = path, name = File(path).name, size = File(path).length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(File(path).name))) }
-                    DocAction("详情", Icons.Filled.Info) {
-                        openInfo = true
-                    }
+                    val fi = FileItem(path = path, name = file.name, size = file.length(), mime = TypeDetect.mimeOf(file.name))
+                    DocAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(fi)) }
+                    DocAction("详情", Icons.Filled.Info) { openInfo = true }
                     DocAction("删除", Icons.Filled.DeleteOutline) {
-                        if (FileOps.deleteToTrash(ctx, listOf(FileItem(path = path, name = File(path).name, size = File(path).length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(File(path).name))) > 0) nav.pop()
+                        if (FileOps.deleteToTrash(ctx, listOf(fi)) > 0) nav.pop()
                     }
                 }
             }
@@ -199,6 +198,8 @@ private fun DocAction(label: String, icon: androidx.compose.ui.graphics.vector.I
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun PdfViewerScreen(nav: NavStack, path: String) {
     val ctx = LocalContext.current
     val file = remember(path) { File(path) }
@@ -243,7 +244,7 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
             )
-        }
+        },
         bottomBar = {
             Surface(color = SurfaceDark) {
                 Row(
@@ -276,6 +277,11 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
                 else -> PdfPages(renderer!!, pageCount, lock)
             }
         }
+    }
+
+    toast?.let {
+        AlertDialog(onDismissRequest = { toast = null }, title = { Text("详情") }, text = { Text(it) },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } })
     }
 }
 
@@ -332,8 +338,4 @@ private fun PdfPage(renderer: PdfRenderer, index: Int, widthPx: Int, lock: Any) 
         }
     }
 
-    toast?.let {
-        AlertDialog(onDismissRequest = { toast = null }, title = { Text("详情") }, text = { Text(it) },
-            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } })
-    }
 }
