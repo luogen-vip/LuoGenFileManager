@@ -5,6 +5,7 @@ import android.graphics.Color as AColor
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -346,6 +347,7 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PdfPages(renderer: PdfRenderer, pageCount: Int, lock: Any) {
     val widthPx = with(LocalDensity.current) { 1000.dp.roundToPx() }
