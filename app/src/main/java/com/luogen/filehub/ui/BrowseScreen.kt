@@ -77,7 +77,12 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         volumes = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
     }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf("browse:" + dirPath))
+    var firstSortEffect by remember { mutableStateOf(true) }
     LaunchedEffect(sortMode, asc, query) {
+        if (firstSortEffect) {
+            firstSortEffect = false
+            return@LaunchedEffect
+        }
         try { listState.scrollToItem(0) } catch (_: Throwable) {}
     }
 

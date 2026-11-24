@@ -38,18 +38,29 @@ object ArchiveUtil {
     private val XZLIKE = setOf("xz", "txz")
     private val ISOLIKE = setOf("iso")
 
-    fun isSupported(file: File): Boolean {
+    /** 后缀不可靠时用文件头兜底：没有后缀/被改名的 zip、7z、rar 也能解 */
+    private fun effExt(file: File): String {
         val e = extOf(file.name)
+        if (e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE || e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ISOLIKE) return e
+        val m = try { TypeDetect.detectByMagic(file) } catch (_: Throwable) { null }
+        return when (m) {
+            "zip" -> "zip"; "rar" -> "rar"; "7z" -> "7z"; "gz" -> "gz"; "bz2" -> "bz2"; "xz" -> "xz"
+            else -> e
+        }
+    }
+
+    fun isSupported(file: File): Boolean {
+        val e = effExt(file)
         return e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE ||
             e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ISOLIKE
     }
 
-    fun formatName(file: File): String = extOf(file.name).uppercase().ifEmpty { "未知" }
+    fun formatName(file: File): String = effExt(file).uppercase().ifEmpty { "未知" }
 
     // ---------------- 列表 ----------------
 
     fun list(file: File): ArchiveResult {
-        val e = extOf(file.name)
+        val e = effExt(file)
         return try {
             when {
                 e in ZIPLIKE -> listZip(file)
@@ -107,7 +118,7 @@ object ArchiveUtil {
     }
 
     private fun listCompressed(file: File): ArchiveResult {
-        val e = extOf(file.name)
+        val e = effExt(file)
         val stream = openCompressed(file, e) ?: return ArchiveResult(false, "无法打开压缩流")
         stream.use { ins ->
             // gz 里可能是 tar
@@ -173,7 +184,7 @@ object ArchiveUtil {
         skipBroken: Boolean = true,
         onProgress: (doneBytes: Long, totalBytes: Long, current: String) -> Unit = { _, _, _ -> }
     ): ArchiveResult {
-        val e = extOf(file.name)
+        val e = effExt(file)
         if (!destDir.exists()) destDir.mkdirs()
         val total = when {
             e in ZIPLIKE || e in SEVENZ || e in TARLIKE || e in RARLIKE || e in ISOLIKE || e in GZLIKE || e in BZ2LIKE || e in XZLIKE -> estimateTotal(file)
@@ -202,7 +213,7 @@ object ArchiveUtil {
         return try {
             if (!destDir.exists()) destDir.mkdirs()
             val target = File(destDir, entryName)
-            val e = extOf(file.name)
+            val e = effExt(file)
             if (e in ZIPLIKE) {
                 ZipFile(file).use { zf ->
                     val z = zf.getEntry(entryName)
@@ -227,7 +238,7 @@ object ArchiveUtil {
 
     private fun estimateTotal(file: File): Long {
         return try {
-            val e = extOf(file.name)
+            val e = effExt(file)
             when {
                 e in ZIPLIKE -> {
                     var t = 0L

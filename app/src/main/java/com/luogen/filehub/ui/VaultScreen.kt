@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -582,7 +584,11 @@ private fun VaultContent(ctx: Context, nav: NavStack, repo: FileRepo, key: Secre
             if (entries.isEmpty()) {
                 EmptyView("保险箱是空的，点右下角 + 添加文件")
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                val vaultList = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf("vault:list"))
+                LaunchedEffect(vaultList) {
+                    snapshotFlow { vaultList.firstVisibleItemIndex }.collect { AppState.keepScroll("vault:list", it) }
+                }
+                LazyColumn(Modifier.fillMaxSize(), state = vaultList) {
                     items(count = entries.size, key = { entries[it].id }) { idx ->
                         val e = entries[idx]
                         var menu by remember { mutableStateOf(false) }

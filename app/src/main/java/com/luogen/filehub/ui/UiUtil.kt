@@ -79,6 +79,12 @@ fun itemCat(item: FileItem): Cat {
     if (item.isDir) return Cat.FILE
     // 已安装应用（有包名）或 apk 文件都算“应用”
     if (item.packageName.isNotEmpty() || item.ext == "apk") return Cat.APP
+    if (item.ext.isEmpty() && item.path.isNotEmpty()) {
+        try {
+            val f = java.io.File(item.path)
+            if (f.isFile) return com.luogen.filehub.data.TypeDetect.catOfFile(f, item.mime)
+        } catch (_: Throwable) {}
+    }
     return TypeDetect.catOf(item.name, item.mime)
 }
 
@@ -329,7 +335,7 @@ fun FileRow(
             Text(
                 buildString {
                     append(item.size.toSizeText())
-                    if (!item.isDir && item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime))
+                    if (!item.isDir && item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime, java.io.File(item.path)))
                     append(" · ").append(item.modified.toRelativeTime())
                 },
                 color = TextDim,

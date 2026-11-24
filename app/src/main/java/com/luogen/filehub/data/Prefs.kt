@@ -10,6 +10,30 @@ object Prefs {
 
     const val KEY_VAULT_CREDS = "vault_creds"
 
+    // ---------- FTP ----------
+    fun ftpSettings(c: Context): FtpSettings {
+        val defRoot = android.os.Environment.getExternalStorageDirectory().absolutePath
+        return FtpSettings(
+            port = sp.getInt("ftp_port", 2121),
+            user = sp.getString("ftp_user", "luogen") ?: "luogen",
+            pass = sp.getString("ftp_pass", "123456") ?: "123456",
+            anonymous = sp.getBoolean("ftp_anon", false),
+            readOnly = sp.getBoolean("ftp_ro", false),
+            root = sp.getString("ftp_root", defRoot) ?: defRoot
+        )
+    }
+
+    fun setFtpSettings(c: Context, s: FtpSettings) {
+        sp.edit()
+            .putInt("ftp_port", s.port)
+            .putString("ftp_user", s.user)
+            .putString("ftp_pass", s.pass)
+            .putBoolean("ftp_anon", s.anonymous)
+            .putBoolean("ftp_ro", s.readOnly)
+            .putString("ftp_root", s.root)
+            .apply()
+    }
+
     fun init(c: Context) {
         if (!::sp.isInitialized) {
             sp = c.applicationContext.getSharedPreferences("lgfm", Context.MODE_PRIVATE)

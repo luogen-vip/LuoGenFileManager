@@ -322,7 +322,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                     when {
                         loading -> "正在搜索…"
                         searched -> "找到 ${shown.size} 个结果"
-                        else -> "输入关键词，边打边出结果"
+                        else -> "输入文件名或任意关键词"
                     },
                     color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
                 )
@@ -331,7 +331,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                query.isBlank() -> EmptyView("输入文件名关键词即可实时搜索")
+                query.isBlank() -> EmptyView("输入文件名或关键词开始搜索")
                 shown.isEmpty() && searched -> EmptyView("没有匹配的文件")
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     items(count = shown.size, key = { shown[it].key }) { idx ->

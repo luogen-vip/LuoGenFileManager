@@ -26,6 +26,8 @@ object AppState {
 
     /** 点通知栏/首页迷你播放器时要打开的播放页 */
     var audioOpenRequested by mutableStateOf(false)
+    var dataVersion by mutableStateOf(0)
+    var ftpOpenRequested by mutableStateOf(false)
 
     // ---------- 滚动位置 ----------
     private val scroll = HashMap<String, Int>()
@@ -46,6 +48,19 @@ object AppState {
     }
     fun drop(vararg keys: String) {
         keys.forEach { lists.remove(it); listsAt.remove(it) }
+    }
+
+    fun dropAllLists() {
+        lists.clear()
+        listsAt.clear()
+    }
+
+    /** 任何增删改/收藏/回收站操作后调用：清列表缓存 + 首页计数待刷新 */
+    fun markDataChanged() {
+        dropAllLists()
+        countsDirty = true
+        cleanDirty = true
+        dataVersion++
     }
 
     /** 有缓存先返回缓存（秒开），过期则在后台刷新 */

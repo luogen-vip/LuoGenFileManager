@@ -139,6 +139,16 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     modifier = Modifier.fillMaxSize().padding(8.dp),
                     textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
                 )
+                text.isEmpty() -> Column(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Filled.Article, null, tint = TextDim, modifier = Modifier.size(42.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("这个文件是空的", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
+                    Text("文件里没有任何内容（0 字节），不是没有加载出来。点右上角编辑可以直接写内容。", fontSize = 12.sp, color = TextDim)
+                }
                 else -> SelectionContainer {
                     Text(
                         text,

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -195,7 +196,34 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(16))
+                .background(SurfaceDark)
+                .border(1.dp, BorderSoft, RoundedCornerShape(16))
+                .clickable { nav.push(Screen.Ftp) }
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(10)).background(BrandBlue.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Filled.Wifi, null, tint = BrandBlue, modifier = Modifier.size(22.dp)) }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("FTP 无线传输", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = TextMain)
+                Text(
+                    if (com.luogen.filehub.data.FtpManager.running) "正在运行 · ${com.luogen.filehub.data.FtpManager.address}"
+                    else "电脑连同一 WiFi，直接访问手机文件",
+                    fontSize = 11.sp, color = if (com.luogen.filehub.data.FtpManager.running) GoodGreen else TextDim,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(Icons.Filled.ChevronRight, null, tint = TextDim, modifier = Modifier.size(16.dp))
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         val tiles = homeCats.map { cat ->
             cat to when (cat) {
@@ -226,7 +254,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text("v1.3.1 · 罗根", color = TextDim, fontSize = 11.sp)
+        Text("v1.4.0 · 罗根", color = TextDim, fontSize = 11.sp)
         Spacer(Modifier.height(20.dp))
     }
 }

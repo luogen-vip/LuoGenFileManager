@@ -1,5 +1,6 @@
 package com.luogen.filehub.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,10 +25,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.asImageBitmap
 import com.luogen.filehub.data.AudioHub
 import com.luogen.filehub.model.nameNoExt
 import kotlinx.coroutines.delay
@@ -63,14 +68,22 @@ fun MiniPlayerBar(nav: NavStack) {
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val ctx = LocalContext.current
+        val cover = remember(path, AudioHub.coverTick) {
+            AudioHub.coverBitmap(ctx, path, 200)
+        }
         Box(
             Modifier
-                .size(40.dp)
+                .size(44.dp)
                 .clip(RoundedCornerShape(10))
                 .background(BrandBlue.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.MusicNote, null, tint = BrandBlue, modifier = Modifier.size(22.dp))
+            if (cover != null) {
+                Image(cover.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            } else {
+                Icon(Icons.Filled.MusicNote, null, tint = BrandBlue, modifier = Modifier.size(22.dp))
+            }
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
@@ -84,6 +97,9 @@ fun MiniPlayerBar(nav: NavStack) {
                 (if (playing) "正在播放" else "已暂停") + " · " + fmtTime(pos) + " / " + fmtTime(dur),
                 color = TextDim, fontSize = 11.sp, maxLines = 1
             )
+        }
+        IconButton(onClick = { AudioHub.prev() }) {
+            Icon(Icons.Filled.SkipPrevious, null, tint = TextDim)
         }
         IconButton(onClick = { AudioHub.toggle() }) {
             Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, tint = BrandBlue)

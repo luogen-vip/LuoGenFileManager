@@ -8,7 +8,10 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadata
+import android.media.MediaMetadataRetriever
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.net.Uri
@@ -43,6 +46,9 @@ object AudioHub {
         private set
     var duration by mutableStateOf(0L)
         private set
+    /** 封面变化计数，界面靠它立刻刷新 */
+    var coverTick by mutableStateOf(0)
+        private set
     var shuffleOn by mutableStateOf(false)
         private set
     var repeatMode by mutableStateOf(0)
@@ -50,6 +56,30 @@ object AudioHub {
     private var startedService = false
 
     fun currentPath(): String? = playlist.getOrNull(index)
+
+    fun notifyCoverChanged() {
+        coverTick++
+        pushState()
+        refreshNotification()
+    }
+
+    /** 先取用户自定义封面，再退回歌曲内嵌封面 */
+    fun coverBitmap(ctx: Context, path: String, max: Int = 512): Bitmap? {
+        val custom = Prefs.coverFor(path)
+        if (custom != null && File(custom).exists()) {
+            try {
+                val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+                return BitmapFactory.decodeFile(custom, opts)
+            } catch (_: Throwable) {}
+        }
+        return try {
+            val mmr = MediaMetadataRetriever()
+            mmr.setDataSource(path)
+            val art = mmr.embeddedPicture
+            mmr.release()
+            if (art != null && art.isNotEmpty()) BitmapFactory.decodeByteArray(art, 0, art.size) else null
+        } catch (_: Throwable) { null }
+    }
 
     fun ensure(ctx: Context): ExoPlayer {
         appCtx = ctx.applicationContext
@@ -209,13 +239,16 @@ object AudioHub {
                     .build()
             )
             val path = currentPath()
-            s.setMetadata(
-                MediaMetadata.Builder()
-                    .putString(MediaMetadata.METADATA_KEY_TITLE, path?.let { File(it).name } ?: "罗根文件管家")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "罗根文件管家")
-                    .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
-                    .build()
-            )
+            val b = MediaMetadata.Builder()
+                .putString(MediaMetadata.METADATA_KEY_TITLE, path?.let { File(it).name } ?: "罗根文件管家")
+                .putString(MediaMetadata.METADATA_KEY_ARTIST, "罗根文件管家")
+                .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
+            val art = path?.let { appCtx?.let { c -> coverBitmap(c, it) } }
+            if (art != null) {
+                b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
+                b.putBitmap(MediaMetadata.METADATA_KEY_ART, art)
+            }
+            s.setMetadata(b.build())
         } catch (_: Throwable) {}
     }
 
@@ -255,6 +288,8 @@ object AudioHub {
                 return Notification.Action.Builder(icon, title, pi).build()
             }
             val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(ctx, channel) else Notification.Builder(ctx)
+            val art = coverBitmap(ctx, path)
+            if (art != null) builder.setLargeIcon(art)
             builder
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentTitle(File(path).name)

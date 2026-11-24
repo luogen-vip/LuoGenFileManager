@@ -67,6 +67,15 @@ object TypeDetect {
         }
     }
 
+    /** 结合文件头判断真实类型：没有后缀、后缀被改过的文件也能识别 */
+    fun catOfFile(f: File, mime: String = ""): Cat {
+        val byName = catOf(f.name, mime)
+        if (byName != Cat.FILE) return byName
+        val magic = try { detectByMagic(f) } catch (_: Throwable) { null } ?: return Cat.FILE
+        if (magic == "txt") return Cat.DOC
+        return catOf("x." + magic, mime)
+    }
+
     private fun head(f: File, len: Int = 16): ByteArray {
         val out = ByteArray(len)
         try {
@@ -183,7 +192,7 @@ object TypeDetect {
     }
 
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
-    fun labelOf(name: String, mime: String = ""): String {
+    fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
@@ -201,7 +210,22 @@ object TypeDetect {
             else -> ""
         }
         if (known.isNotEmpty()) return known
-        return if (e.isEmpty()) "未知类型" else "未知类型（.$e）"
+        if (e.isEmpty() && file != null && file.isFile) {
+            val magic = try { detectByMagic(file) } catch (_: Throwable) { null }
+            if (magic != null) {
+                val c = when {
+                    magic in IMAGE_EXT -> "图片"
+                    magic in VIDEO_EXT -> "视频"
+                    magic in AUDIO_EXT -> "音频"
+                    magic in ARCHIVE_EXT -> "压缩包"
+                    magic == "pdf" -> "PDF 文档"
+                    magic == "txt" -> "文本"
+                    else -> "文件"
+                }
+                return "$c（按内容识别 · ${magic.uppercase()}）"
+            }
+        }
+        return if (e.isEmpty()) "无后缀 · 未知类型" else "未知类型（.$e）"
     }
 
     private val ZIP_FAMILY = setOf(

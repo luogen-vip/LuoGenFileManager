@@ -145,7 +145,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             }
             prog = null
             toast = msg
-            AppState.drop(cacheKey)
+            AppState.markDataChanged()
             AppState.countsDirty = true
             force++
             selected = emptySet()
@@ -197,7 +197,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         val co = object : android.database.ContentObserver(handler) {
             override fun onChange(selfChange: Boolean) {
                 if (cat != Cat.APP) {
-                    AppState.drop(cacheKey)
+                    AppState.markDataChanged()
                     AppState.countsDirty = true
                     force++
                 }
@@ -211,7 +211,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         val pkgReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(c: android.content.Context?, i: android.content.Intent?) {
                 if (cat == Cat.APP) {
-                    AppState.drop(cacheKey)
+                    AppState.markDataChanged()
                     AppState.countsDirty = true
                     force++
                 }
@@ -232,10 +232,27 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         }
     }
 
-    // 换排序 / 搜索 / 切换已安装·安装包：回到列表最顶部
+    // 换排序 / 搜索 / 切换已安装·安装包才回顶；第一次进入要恢复上次的位置
+    var firstSortEffect by remember { mutableStateOf(true) }
+    var restoredScroll by remember { mutableStateOf(false) }
     LaunchedEffect(sortMode, asc, query, appTab, gridMode) {
+        if (firstSortEffect) {
+            firstSortEffect = false
+            return@LaunchedEffect
+        }
         try { listState.scrollToItem(0) } catch (_: Throwable) {}
         try { gridState.scrollToItem(0) } catch (_: Throwable) {}
+    }
+    LaunchedEffect(items.size, cat, appTab) {
+        if (!restoredScroll && items.isNotEmpty()) {
+            restoredScroll = true
+            val saved = AppState.scrollOf(listKey)
+            if (saved > 0) {
+                val max = (items.size - 1).coerceAtLeast(0)
+                try { listState.scrollToItem(saved.coerceAtMost(max)) } catch (_: Throwable) {}
+                try { gridState.scrollToItem(saved.coerceAtMost(max)) } catch (_: Throwable) {}
+            }
+        }
     }
 
     Scaffold(
@@ -401,7 +418,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                         },
                         ActionSpec(if (cat == Cat.FAV) "取消收藏" else "收藏", if (cat == Cat.FAV) Icons.Filled.BookmarkRemove else Icons.Filled.Bookmark) {
                             selItems.forEach { Prefs.toggleFav(it.path) }
-                            AppState.drop(cacheKey)
+                            AppState.markDataChanged()
                             AppState.countsDirty = true
                             toast = if (cat == Cat.FAV) "已取消收藏" else "收藏状态已更新"
                             force++
@@ -480,7 +497,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                         onRename = { showRename = it },
                                         onMsg = { toast = it },
                                         onExtract = { extractApks(listOf(it0)) },
-                                        onRefresh = { AppState.drop(cacheKey); AppState.countsDirty = true; force++ }
+                                        onRefresh = { AppState.markDataChanged(); AppState.countsDirty = true; force++ }
                                     )
                                 }
                             }
@@ -496,7 +513,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                     onRename = { showRename = it },
                                     onMsg = { toast = it },
                                     onExtract = { extractApks(listOf(it0)) },
-                                    onRefresh = { AppState.drop(cacheKey); force++ }
+                                    onRefresh = { AppState.markDataChanged(); force++ }
                                 )
                             }
                         }
@@ -515,7 +532,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                 showRename = null
                 val err = FileOps.rename(item, newName)
                 toast = err ?: "已重命名"
-                AppState.drop(cacheKey)
+                AppState.markDataChanged()
                 AppState.countsDirty = true
                 force++
             }
@@ -531,7 +548,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                 var ok = 0
                 pairs.forEach { (item, newName) -> if (FileOps.rename(item, newName) == null) ok++ }
                 toast = "批量重命名完成：$ok/${pairs.size}"
-                AppState.drop(cacheKey)
+                AppState.markDataChanged()
                 selected = emptySet()
                 force++
             }

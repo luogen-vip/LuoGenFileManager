@@ -32,6 +32,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         if (intent?.getBooleanExtra("open_audio", false) == true) AppState.audioOpenRequested = true
+        if (intent?.getBooleanExtra("open_ftp", false) == true) AppState.ftpOpenRequested = true
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         try {
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra("open_audio", false)) AppState.audioOpenRequested = true
+        if (intent.getBooleanExtra("open_ftp", false)) AppState.ftpOpenRequested = true
     }
 }
 
@@ -94,6 +96,12 @@ fun AppRoot() {
             onRecheck = { granted = hasAllFilesAccess(ctx) }
         )
     } else {
+        LaunchedEffect(AppState.ftpOpenRequested) {
+            if (AppState.ftpOpenRequested) {
+                AppState.ftpOpenRequested = false
+                try { nav.push(Screen.Ftp) } catch (_: Throwable) {}
+            }
+        }
         LaunchedEffect(AppState.audioOpenRequested) {
             if (AppState.audioOpenRequested) {
                 AppState.audioOpenRequested = false
@@ -179,6 +187,7 @@ sealed class Screen {
     data class GlobalSearch(val query: String) : Screen()
     data class CleanCat(val cat: com.luogen.filehub.model.Cat) : Screen()
     object Vault : Screen()
+    object Ftp : Screen()
     data class VaultViewer(val cachedPath: String, val name: String) : Screen()
 }
 
@@ -186,7 +195,7 @@ sealed class Screen {
 fun openItem(ctx: Context, nav: NavStack, item: com.luogen.filehub.model.FileItem, siblings: List<com.luogen.filehub.model.FileItem>) {
     val file = File(item.path)
     if (!file.exists()) return
-    val cat = com.luogen.filehub.data.TypeDetect.catOf(item.name, item.mime)
+    val cat = com.luogen.filehub.data.TypeDetect.catOfFile(file, item.mime)
     when (cat) {
         com.luogen.filehub.model.Cat.IMAGE -> {
             val images = siblings.filter { com.luogen.filehub.data.TypeDetect.catOf(it.name, it.mime) == com.luogen.filehub.model.Cat.IMAGE }

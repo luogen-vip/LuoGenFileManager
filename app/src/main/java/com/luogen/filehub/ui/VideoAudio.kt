@@ -273,7 +273,8 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                 }
                 Prefs.setCover(paths[index], target.absolutePath)
                 scope.launch { cover = Thumbs.load(ctx, target.absolutePath, false, 400) }
-                toast = "封面已更新"
+                hub.notifyCoverChanged()
+                toast = "封面已更新（首页和通知栏同步生效）"
             } catch (_: Throwable) {
                 toast = "设置封面失败"
             }

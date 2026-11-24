@@ -33,6 +33,7 @@ fun AppNav(ctx: Context, nav: NavStack) {
         is Screen.GlobalSearch -> GlobalSearchScreen(ctx, nav, repo, s.query)
         is Screen.CleanCat -> CleanCatScreen(ctx, nav, repo, s.cat)
         is Screen.Vault -> VaultScreen(ctx, nav, repo)
+        is Screen.Ftp -> FtpScreen(ctx, nav)
         is Screen.VaultViewer -> ArchiveViewerScreen(ctx, nav, s.cachedPath)
     }
 }
