@@ -2,33 +2,43 @@ package com.luogen.filehub.ui
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
+import com.luogen.filehub.data.Prefs
+import com.luogen.filehub.data.TypeDetect
+import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.toFullTime
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -48,6 +58,10 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var chrome by remember { mutableStateOf(true) }
     var infoFor by remember { mutableStateOf<String?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var renameFor by remember { mutableStateOf<String?>(null) }
+
+    val cur = paths[pagerState.currentPage]
+    fun itemOf(p: String) = FileItem(path = p, name = File(p).name, size = File(p).length(), mime = TypeDetect.mimeOf(p))
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
@@ -63,32 +77,46 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                     .align(Alignment.TopStart),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { nav.pop() }) {
-                    Icon(Icons.Filled.ArrowBack, null, tint = Color.White)
-                }
+                IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null, tint = Color.White) }
                 Column(Modifier.weight(1f)) {
-                    Text(File(paths[pagerState.currentPage]).name, color = Color.White, fontSize = 14.sp, maxLines = 1)
+                    Text(File(cur).name, color = Color.White, fontSize = 14.sp, maxLines = 1)
                     Text("${pagerState.currentPage + 1} / ${paths.size}", color = Color(0xCCFFFFFF), fontSize = 11.sp)
                 }
-                IconButton(onClick = { infoFor = paths[pagerState.currentPage] }) {
-                    Icon(Icons.Filled.Info, null, tint = Color.White)
+                IconButton(onClick = { infoFor = cur }) { Icon(Icons.Filled.Info, null, tint = Color.White) }
+                IconButton(onClick = { FileOps.share(ctx, listOf(itemOf(cur))) }) {
+                    Icon(Icons.Filled.Share, null, tint = Color.White)
                 }
-                IconButton(onClick = {
-                    val p = paths[pagerState.currentPage]
-                    val fi = com.luogen.filehub.model.FileItem(
-                        path = p,
-                        name = File(p).name,
-                        mime = com.luogen.filehub.data.TypeDetect.mimeOf(p)
-                    )
-                    FileOps.share(ctx, listOf(fi))
-                }) { Icon(Icons.Filled.Share, null, tint = Color.White) }
+            }
+
+            // 底部功能栏（预览时也能分享/收藏/重命名/删除）
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x99000000))
+                    .padding(vertical = 6.dp)
+                    .align(Alignment.BottomCenter),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                ViewerAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(itemOf(cur))) }
+                ViewerAction(
+                    if (Prefs.isFav(cur)) "已收藏" else "收藏",
+                    if (Prefs.isFav(cur)) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder
+                ) {
+                    toast = if (Prefs.toggleFav(cur)) "已收藏" else "已取消收藏"
+                }
+                ViewerAction("重命名", Icons.Filled.DriveFileRenameOutline) { renameFor = cur }
+                ViewerAction("删除", Icons.Filled.DeleteOutline) {
+                    val n = FileOps.deleteToTrash(ctx, listOf(itemOf(cur)))
+                    toast = if (n > 0) "已移入回收站" else "删除失败"
+                    nav.pop()
+                }
+                ViewerAction("详情", Icons.Filled.Info) { infoFor = cur }
             }
         }
     }
 
     infoFor?.let { path ->
         val f = File(path)
-        LaunchedEffect(path) {}
         val bounds = remember(path) {
             val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(path, o)
@@ -106,12 +134,23 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             onCopy = { clipboard.setText(AnnotatedString(it)); toast = "路径已复制" },
             onDismiss = { infoFor = null }
         )
-        Spacer(Modifier.height(0.dp))
+    }
+
+    renameFor?.let { p ->
+        RenameDialog(
+            initial = File(p).name,
+            onDismiss = { renameFor = null },
+            onConfirm = { newName ->
+                renameFor = null
+                toast = FileOps.rename(itemOf(p), newName) ?: "已重命名（返回列表后刷新可见）"
+            }
+        )
     }
 
     toast?.let { t ->
         AlertDialog(
             onDismissRequest = { toast = null },
+            shape = RoundedCornerShape(22.dp),
             title = { Text("提示") },
             text = { Text(t) },
             confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } }
@@ -120,12 +159,28 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
 }
 
 @Composable
+internal fun ViewerAction(label: String, icon: ImageVector, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(10))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, fontSize = 10.sp, color = Color(0xCCFFFFFF))
+    }
+}
+
+@Composable
 private fun ImagePage(path: String, onTap: () -> Unit) {
     val ctx = LocalContext.current
     val config = LocalConfiguration.current
-    var bmp by remember(path) { mutableStateOf(Thumbs.peek("1200|$path")) }
+    val req = maxOf(config.screenWidthDp, 1080)
+    var bmp by remember(path) { mutableStateOf(Thumbs.peek("$req|$path")) }
     LaunchedEffect(path) {
-        bmp = Thumbs.load(ctx, path, false, req = maxOf(config.screenWidthDp, 1080))
+        if (bmp == null) bmp = Thumbs.load(ctx, path, false, req = req)
     }
     Box(
         Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) },
@@ -140,66 +195,88 @@ private fun ImagePage(path: String, onTap: () -> Unit) {
                 contentScale = ContentScale.Fit
             )
         } else {
-            CircularProgressIndicator(color = Color.White)
+            Icon(Icons.Filled.Photo, null, tint = Color(0x33FFFFFF), modifier = Modifier.size(64.dp))
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.data.FileRepo, initial: String) {
     var query by remember { mutableStateOf(initial) }
-    var all by remember { mutableStateOf<List<com.luogen.filehub.model.FileItem>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
+    var results by remember { mutableStateOf<List<FileItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var searched by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        all = withContext(Dispatchers.IO) {
-            try {
-                repo.allMediaFiles().sortedByDescending { it.modified }
-            } catch (_: Throwable) { emptyList() }
+    // 边打边搜：MediaStore 的 LIKE 查询，不再全盘索引
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            results = emptyList()
+            searched = false
+            loading = false
+            return@LaunchedEffect
         }
+        loading = true
+        delay(180)
+        val r = withContext(Dispatchers.IO) {
+            try { repo.searchAll(q, 200) } catch (_: Throwable) { emptyList() }
+        }
+        results = r
+        searched = true
         loading = false
-    }
-
-    val results = remember(query, all) {
-        if (query.isBlank()) emptyList()
-        else all.filter { it.name.contains(query, true) }.take(200)
     }
 
     Scaffold(
         containerColor = BgDeep,
         topBar = {
-            Column {
+            Column(Modifier.background(SurfaceDark)) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null) }
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("搜索全部文件·实时预览") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BrandBlue, unfocusedBorderColor = SurfaceDark2,
-                            focusedContainerColor = SurfaceDark, unfocusedContainerColor = SurfaceDark
-                        )
-                    )
+                    IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
+                    Row(
+                        Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(22))
+                            .background(SurfaceDark2)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Search, null, tint = TextDim, modifier = Modifier.size(17.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f)) {
+                            BasicTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 14.sp)
+                            )
+                            if (query.isEmpty()) Text("搜索全部文件", color = TextDim, fontSize = 13.sp)
+                        }
+                        if (query.isNotEmpty()) {
+                            Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable { query = "" })
+                        }
+                    }
                 }
                 Text(
-                    if (loading) "正在索引全部文件…" else "找到 ${results.size} 个（最多显示 200）",
-                    color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 6.dp)
+                    when {
+                        loading -> "正在搜索…"
+                        searched -> "找到 ${results.size} 个结果"
+                        else -> "输入关键词，边打边出结果"
+                    },
+                    color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
                 )
             }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (query.isBlank()) {
-                EmptyView("输入关键词，边打边出结果")
-            } else if (results.isEmpty() && !loading) {
-                EmptyView("没有匹配的文件")
-            } else {
-                androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize()) {
+            when {
+                query.isBlank() -> EmptyView("输入文件名关键词即可实时搜索")
+                results.isEmpty() && searched -> EmptyView("没有匹配的文件")
+                else -> LazyColumn(Modifier.fillMaxSize()) {
                     items(count = results.size, key = { results[it].key }) { idx ->
                         val item = results[idx]
                         FileRow(
@@ -208,9 +285,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                             selectionMode = false,
                             onClick = { openItem(ctx, nav, item, results) },
                             onLongClick = {},
-                            trailing = {
-                                Text(itemCat(item).title, color = TextDim, fontSize = 11.sp)
-                            }
+                            trailing = { Text(itemCat(item).title, color = TextDim, fontSize = 11.sp) }
                         )
                     }
                 }

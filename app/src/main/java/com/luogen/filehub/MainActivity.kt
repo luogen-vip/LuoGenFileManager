@@ -33,6 +33,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Prefs.init(this)
+        try {
+            androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+                .isAppearanceLightStatusBars = true
+        } catch (_: Throwable) {
+        }
         setContent {
             AppTheme {
                 AppRoot()
@@ -52,7 +57,7 @@ fun hasAllFilesAccess(ctx: Context): Boolean {
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
-    val nav = remember { NavStack() }
+    val nav = AppState.nav
     var granted by remember { mutableStateOf(hasAllFilesAccess(ctx)) }
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->

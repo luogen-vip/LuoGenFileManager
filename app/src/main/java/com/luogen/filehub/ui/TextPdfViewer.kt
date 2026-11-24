@@ -7,6 +7,7 @@ import android.os.ParcelFileDescriptor
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -28,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
 import com.luogen.filehub.data.TypeDetect
+import com.luogen.filehub.model.FileItem
+import com.luogen.filehub.model.toFullTime
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,6 +48,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     var editable by remember(path) { mutableStateOf(true) }
     var askExit by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var openInfo by remember { mutableStateOf(false) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
 
     LaunchedEffect(path) {
@@ -101,6 +105,22 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
             )
+        }
+        bottomBar = {
+            Surface(color = SurfaceDark) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    DocAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(FileItem(path = path, name = File(path).name, size = File(path).length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(File(path).name))) }
+                    DocAction("详情", Icons.Filled.Info) {
+                        openInfo = true
+                    }
+                    DocAction("删除", Icons.Filled.DeleteOutline) {
+                        if (FileOps.deleteToTrash(ctx, listOf(FileItem(path = path, name = File(path).name, size = File(path).length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(File(path).name))) > 0) nav.pop()
+                    }
+                }
+            }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -167,14 +187,25 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun DocAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Column(
+        Modifier.clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, null, tint = BrandBlue, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(label, fontSize = 10.sp, color = TextDim)
+    }
+}
+
 fun PdfViewerScreen(nav: NavStack, path: String) {
     val ctx = LocalContext.current
     val file = remember(path) { File(path) }
     var renderer by remember { mutableStateOf<PdfRenderer?>(null) }
     var pageCount by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
+    var toast by remember { mutableStateOf<String?>(null) }
     val lock = remember { Any() }
 
     LaunchedEffect(path) {
@@ -212,6 +243,24 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
             )
+        }
+        bottomBar = {
+            Surface(color = SurfaceDark) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    DocAction("分享", Icons.Filled.Share) {
+                        FileOps.share(ctx, listOf(FileItem(path = path, name = file.name, size = file.length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(file.name))))
+                    }
+                    DocAction("详情", Icons.Filled.Info) {
+                        toast = "${file.name}\n${file.length().toSizeText()} · ${pageCount} 页\n${path}"
+                    }
+                    DocAction("删除", Icons.Filled.DeleteOutline) {
+                        if (FileOps.deleteToTrash(ctx, listOf(FileItem(path = path, name = file.name, size = file.length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(file.name))) > 0) nav.pop()
+                    }
+                }
+            }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -281,5 +330,10 @@ private fun PdfPage(renderer: PdfRenderer, index: Int, widthPx: Int, lock: Any) 
                 else -> Box(Modifier.height(180.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = BrandBlue) }
             }
         }
+    }
+
+    toast?.let {
+        AlertDialog(onDismissRequest = { toast = null }, title = { Text("详情") }, text = { Text(it) },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } })
     }
 }

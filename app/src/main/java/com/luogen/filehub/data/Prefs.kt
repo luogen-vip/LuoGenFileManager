@@ -117,4 +117,30 @@ object Prefs {
 
     fun lastVaultList(): String = sp.getString("vault_layout", "list") ?: "list"
     fun setVaultLayout(v: String) = sp.edit().putString("vault_layout", v).apply()
+
+    // ---------- 首页统计缓存（重启也不用等扫描） ----------
+    fun countsCache(): Map<com.luogen.filehub.model.Cat, Int> {
+        val out = HashMap<com.luogen.filehub.model.Cat, Int>()
+        try {
+            val raw = sp.getString("counts_json", "") ?: ""
+            if (raw.isNotEmpty()) {
+                val o = JSONObject(raw)
+                o.keys().forEach { k ->
+                    val c = com.luogen.filehub.model.Cat.values().firstOrNull { it.name == k }
+                    if (c != null) out[c] = o.optInt(k, 0)
+                }
+            }
+        } catch (_: Throwable) {
+        }
+        return out
+    }
+
+    fun setCountsCache(m: Map<com.luogen.filehub.model.Cat, Int>) {
+        try {
+            val o = JSONObject()
+            m.forEach { (k, v) -> o.put(k.name, v) }
+            sp.edit().putString("counts_json", o.toString()).apply()
+        } catch (_: Throwable) {
+        }
+    }
 }

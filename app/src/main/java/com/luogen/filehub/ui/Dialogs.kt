@@ -38,6 +38,7 @@ fun RenameDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(22.dp),
         title = { Text("重命名") },
         text = {
             Column {
@@ -45,6 +46,7 @@ fun RenameDialog(
                     value = value,
                     onValueChange = { value = it },
                     singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
                     label = { Text("文件名（含扩展名）") },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -201,12 +203,14 @@ fun ConfirmDialog(
     title: String,
     text: String,
     confirmText: String = "确定",
+    dismissText: String = "取消",
     danger: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(22.dp),
         title = { Text(title) },
         text = { Text(text, fontSize = 14.sp) },
         confirmButton = {
@@ -214,7 +218,41 @@ fun ConfirmDialog(
                 Text(confirmText, color = if (danger) DangerRed else BrandBlue)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(dismissText) } }
+    )
+}
+
+/** 通用单选对话框（例如压缩格式） */
+@Composable
+fun SelectDialog(
+    title: String,
+    message: String,
+    options: List<Pair<String, String>>,
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(22.dp),
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(message, color = TextDim, fontSize = 13.sp)
+                Spacer(Modifier.height(10.dp))
+                options.forEach { (label, value) ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(value) }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(label, fontSize = 14.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )
 }
 

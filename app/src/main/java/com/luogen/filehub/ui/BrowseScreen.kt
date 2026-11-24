@@ -1,12 +1,15 @@
 package com.luogen.filehub.ui
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -19,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
@@ -57,6 +61,10 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     var showInfo by remember { mutableStateOf<FileItem?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var prog by remember { mutableStateOf<Prog?>(null) }
+    val startPath = dirPath
+
+    // 返回键：有勾选先取消勾选
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
 
     LaunchedEffect(current, refresh) {
         items = withContext(Dispatchers.IO) { repo.listDir(current) }
@@ -64,7 +72,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
 
     val display = remember(items, query, sortMode, asc) {
         val f = if (query.isBlank()) items else items.filter { it.name.contains(query, true) }
-        Sorter.sort(f, sortMode, asc)
+        Sorter.sort(f, sortMode, asc, dirsFirst = true)
     }
 
     val selItems = remember(selected, items) { items.filter { selected.contains(it.key) } }
@@ -83,7 +91,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     Scaffold(
         containerColor = BgDeep,
         topBar = {
-            Column {
+            Column(Modifier.background(SurfaceDark)) {
                 TopAppBar(
                     title = {
                         Column {
@@ -93,33 +101,53 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            if (current.parentFile != null) current = current.parentFile!!
-                            else nav.pop()
-                        }) { Icon(Icons.Filled.ArrowBack, null) }
+                            if (selected.isNotEmpty()) {
+                                selected = emptySet()
+                            } else if (current.absolutePath != startPath && current.parentFile != null) {
+                                current = current.parentFile!!
+                            } else {
+                                nav.pop()
+                            }
+                        }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
                     },
                     actions = {
                         IconButton(onClick = {
                             selected = if (selected.size == display.size) emptySet() else display.map { it.key }.toSet()
-                        }) { Icon(Icons.Filled.Checklist, null) }
+                        }) { Icon(Icons.Filled.Checklist, null, tint = TextMain) }
                         IconButton(onClick = {
                             sortMode = if (sortMode == SortMode.TIME) SortMode.NAME else SortMode.TIME
                             Prefs.setSort(sortMode, asc)
-                        }) { Icon(Icons.Filled.Sort, null) }
-                        IconButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null) }
+                        }) { Icon(Icons.Filled.Sort, null, tint = TextMain) }
+                        IconButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null, tint = TextMain) }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
                 )
-                OutlinedTextField(
-                    value = query, onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    singleLine = true,
-                    placeholder = { Text("在当前文件夹实时搜索…", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, modifier = Modifier.size(18.dp)) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBlue, unfocusedBorderColor = SurfaceDark2,
-                        focusedContainerColor = SurfaceDark, unfocusedContainerColor = SurfaceDark
-                    )
-                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22))
+                        .background(SurfaceDark2)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Search, null, tint = TextDim, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.weight(1f)) {
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 13.sp)
+                        )
+                        if (query.isEmpty()) Text("在当前文件夹搜索…", color = TextDim, fontSize = 13.sp)
+                    }
+                    if (query.isNotEmpty()) {
+                        Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable { query = "" })
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
             }
         },
         floatingActionButton = {
@@ -135,24 +163,24 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         },
         bottomBar = {
             if (selected.isNotEmpty()) {
-                Surface(color = SurfaceDark) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(4.dp)) {
-                        BrowseAction("分享") { FileOps.share(ctx, selItems) }
-                        BrowseAction("复制") { showCopy = true }
-                        BrowseAction("移动") { showMove = true }
-                        BrowseAction("删除") { showDelete = true }
-                        BrowseAction("重命名") {
+                ActionPanel(
+                    listOf(
+                        ActionSpec("分享", Icons.Filled.Share) { FileOps.share(ctx, selItems) },
+                        ActionSpec("复制", Icons.Filled.ContentCopy) { showCopy = true },
+                        ActionSpec("移动", Icons.Filled.DriveFileMove) { showMove = true },
+                        ActionSpec("删除", Icons.Filled.Delete) { showDelete = true },
+                        ActionSpec("重命名", Icons.Filled.DriveFileRenameOutline) {
                             if (selItems.size == 1) showRename = selItems[0]
-                            else toast = "多选时只支持批量编号重命名，请到对应分类里操作"
-                        }
-                        BrowseAction("收藏") {
+                            else toast = "多选时请到对应分类里做批量重命名"
+                        },
+                        ActionSpec("收藏", Icons.Filled.Bookmark) {
                             selItems.forEach { Prefs.toggleFav(it.path) }
                             toast = "已更新收藏"
                             selected = emptySet()
-                        }
-                        BrowseAction("详情") { if (selItems.size == 1) showInfo = selItems[0] }
-                    }
-                }
+                        },
+                        ActionSpec("详情", Icons.Filled.Info) { if (selItems.size == 1) showInfo = selItems[0] }
+                    )
+                )
             }
         }
     ) { padding ->
@@ -160,7 +188,12 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
             if (display.isEmpty()) {
                 EmptyView(if (query.isNotEmpty()) "没有匹配项" else "这个文件夹是空的")
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                val listKey = "browse:" + startPath
+                val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
+                LaunchedEffect(listState) {
+                    snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
+                }
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                     items(count = display.size, key = { display[it].key }) { idx ->
                         val item = display[idx]
                         var menu by remember { mutableStateOf(false) }
@@ -224,6 +257,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     if (showNewFolder) {
         AlertDialog(
             onDismissRequest = { showNewFolder = false },
+            shape = RoundedCornerShape(22.dp),
             title = { Text("新建文件夹") },
             text = { OutlinedTextField(value = newName, onValueChange = { newName = it }, singleLine = true, label = { Text("文件夹名") }) },
             confirmButton = {
@@ -240,6 +274,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     if (showNewFile) {
         AlertDialog(
             onDismissRequest = { showNewFile = false },
+            shape = RoundedCornerShape(22.dp),
             title = { Text("新建文件") },
             text = {
                 Column {

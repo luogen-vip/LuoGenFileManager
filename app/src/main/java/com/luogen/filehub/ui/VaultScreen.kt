@@ -55,16 +55,25 @@ import kotlin.math.sqrt
 
 @Composable
 fun VaultScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
-    var key by remember { mutableStateOf<SecretKey?>(null) }
+    var key by remember { mutableStateOf<SecretKey?>(AppState.vaultKey) }
     val k = key
     if (k == null) {
         if (!VaultManager.hasCreds()) {
-            VaultSetup(ctx) { newKey -> key = newKey }
+            VaultSetup(ctx) { newKey ->
+                key = newKey
+                AppState.vaultKey = newKey
+            }
         } else {
-            VaultLock(ctx) { unlockedKey -> key = unlockedKey }
+            VaultLock(ctx) { unlockedKey ->
+                key = unlockedKey
+                AppState.vaultKey = unlockedKey
+            }
         }
     } else {
-        VaultContent(ctx, nav, repo, k) { key = null }
+        VaultContent(ctx, nav, repo, k) {
+            key = null
+            AppState.vaultKey = null
+        }
     }
 }
 
@@ -73,7 +82,7 @@ fun VaultScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
 @Composable
 private fun VaultSetup(ctx: Context, onDone: (SecretKey) -> Unit) {
     var created by remember { mutableStateOf<List<Triple<String, String, String>>?>(null) }
-    var showCreator by remember { mutableStateOf(true) }
+    var showCreator by remember { mutableStateOf(false) }
     var key by remember { mutableStateOf<SecretKey?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
 

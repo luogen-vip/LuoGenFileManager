@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -41,8 +42,12 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.luogen.filehub.data.FileOps
 import com.luogen.filehub.data.Prefs
+import com.luogen.filehub.data.TypeDetect
+import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.nameNoExt
+import com.luogen.filehub.model.toFullTime
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -61,6 +66,9 @@ fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var duration by remember { mutableStateOf(0L) }
     var position by remember { mutableStateOf(0L) }
     var playing by remember { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<String?>(null) }
+    var infoFor by remember { mutableStateOf<String?>(null) }
+    var renameFor by remember { mutableStateOf<String?>(null) }
 
     val player = remember { ExoPlayer.Builder(ctx).build() }
 
@@ -151,7 +159,65 @@ fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                     Icon(Icons.Filled.SkipNext, null, tint = if (index < paths.size - 1) Color.White else Color(0x55FFFFFF))
                 }
             }
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x99000000))
+                    .padding(vertical = 6.dp)
+                    .align(Alignment.BottomCenter),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                val p = paths[index]
+                val fi = FileItem(path = p, name = File(p).name, size = File(p).length(), mime = TypeDetect.mimeOf(p))
+                ViewerAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(fi)) }
+                ViewerAction(
+                    if (Prefs.isFav(p)) "已收藏" else "收藏",
+                    if (Prefs.isFav(p)) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder
+                ) { toast = if (Prefs.toggleFav(p)) "已收藏" else "已取消收藏" }
+                ViewerAction("重命名", Icons.Filled.DriveFileRenameOutline) { renameFor = p }
+                ViewerAction("删除", Icons.Filled.DeleteOutline) {
+                    if (FileOps.deleteToTrash(ctx, listOf(fi)) > 0) { toast = "已移入回收站"; nav.pop() }
+                }
+                ViewerAction("详情", Icons.Filled.Info) { infoFor = p }
+            }
         }
+    }
+
+    infoFor?.let { p ->
+        val f = File(p)
+        InfoDialog(
+            title = f.name,
+            rows = listOf(
+                "大小" to f.length().toSizeText(),
+                "时长" to fmtTime(player.duration.coerceAtLeast(0)),
+                "修改时间" to f.lastModified().toFullTime(),
+                "完整路径" to p
+            ),
+            onCopy = { },
+            onDismiss = { infoFor = null }
+        )
+    }
+
+    renameFor?.let { p ->
+        RenameDialog(
+            initial = File(p).name,
+            onDismiss = { renameFor = null },
+            onConfirm = { newName ->
+                renameFor = null
+                toast = FileOps.rename(FileItem(path = p, name = File(p).name, size = File(p).length(), mime = TypeDetect.mimeOf(p)), newName) ?: "已重命名"
+            }
+        )
+    }
+
+    toast?.let {
+        AlertDialog(
+            onDismissRequest = { toast = null },
+            shape = RoundedCornerShape(22.dp),
+            title = { Text("提示") },
+            text = { Text(it) },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } }
+        )
     }
 }
 

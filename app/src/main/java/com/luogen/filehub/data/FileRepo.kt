@@ -3,11 +3,12 @@ package com.luogen.filehub.data
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.os.storage.StorageManager
+import android.os.storage.StorageStatsManager
 import android.provider.MediaStore
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
@@ -23,14 +24,26 @@ class FileRepo(private val ctx: Context) {
 
     // ------------------------- 通用工具 -------------------------
 
+    private val cols = arrayOf(
+        MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
+        MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
+        MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.MIME_TYPE
+    )
+
+    /**
+     * 只读 MediaStore 索引，不再对每条做 File.exists()（15k 文件时这一步会卡十几秒）。
+     * 真实存在性在打开文件时再校验。
+     */
     private fun query(
         uri: Uri,
-        projection: Array<String>,
-        selection: String? = null
+        selection: String? = null,
+        selectionArgs: Array<String>? = null,
+        sort: String? = null,
+        limit: Int = 0
     ): List<FileItem> {
         val out = ArrayList<FileItem>()
         try {
-            resolver.query(uri, projection, selection, null, null)?.use { c ->
+            resolver.query(uri, cols, selection, selectionArgs, sort)?.use { c ->
                 val idIdx = c.getColumnIndex(MediaStore.MediaColumns._ID)
                 val nameIdx = c.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
                 val sizeIdx = c.getColumnIndex(MediaStore.MediaColumns.SIZE)
@@ -41,18 +54,17 @@ class FileRepo(private val ctx: Context) {
                     val name = if (nameIdx >= 0) c.getString(nameIdx) ?: "" else ""
                     val data = if (dataIdx >= 0) c.getString(dataIdx) ?: "" else ""
                     if (data.isEmpty()) continue
-                    val f = File(data)
-                    if (!f.exists()) continue
                     out.add(
                         FileItem(
                             path = data,
-                            name = name.ifEmpty { f.name },
-                            size = if (sizeIdx >= 0) c.getLong(sizeIdx) else f.length(),
+                            name = name.ifEmpty { File(data).name },
+                            size = if (sizeIdx >= 0) c.getLong(sizeIdx) else 0L,
                             modified = (if (dateIdx >= 0) c.getLong(dateIdx) else 0L) * 1000L,
                             mime = if (mimeIdx >= 0) c.getString(mimeIdx) ?: "" else "",
                             id = if (idIdx >= 0) c.getLong(idIdx).toString() else data
                         )
                     )
+                    if (limit > 0 && out.size >= limit) break
                 }
             }
         } catch (_: Exception) {
@@ -60,41 +72,39 @@ class FileRepo(private val ctx: Context) {
         return out
     }
 
-    fun images(): List<FileItem> = query(
-        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-        arrayOf(
-            MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.MIME_TYPE
-        )
-    )
+    private fun countUri(uri: Uri, selection: String? = null): Int = try {
+        resolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), selection, null, null)?.use { it.count } ?: 0
+    } catch (_: Exception) {
+        0
+    }
 
-    fun videos(): List<FileItem> = query(
-        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-        arrayOf(
-            MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.MIME_TYPE
-        )
-    )
-
-    fun audios(): List<FileItem> = query(
-        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-        arrayOf(
-            MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.MIME_TYPE
-        )
-    )
+    fun images(): List<FileItem> = query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+    fun videos(): List<FileItem> = query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+    fun audios(): List<FileItem> = query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
 
     /** 所有文件（MediaStore 索引到的） */
-    fun allMediaFiles(): List<FileItem> = query(
-        MediaStore.Files.getContentUri("external"),
-        arrayOf(
-            MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.MIME_TYPE
+    fun allMediaFiles(): List<FileItem> = query(MediaStore.Files.getContentUri("external"))
+
+    /** 全局搜索：走 MediaStore 索引的 LIKE 查询，不扫全盘 */
+    fun searchAll(q: String, limit: Int = 200): List<FileItem> {
+        val key = q.trim()
+        if (key.isEmpty()) return recent(limit)
+        val uri = MediaStore.Files.getContentUri("external")
+        val selection = "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?"
+        return query(
+            uri,
+            selection = selection,
+            selectionArgs = arrayOf("%$key%"),
+            sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
+            limit = limit
         )
+    }
+
+    /** 最近文件（按修改时间倒序） */
+    fun recent(limit: Int = 200): List<FileItem> = query(
+        MediaStore.Files.getContentUri("external"),
+        sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
+        limit = limit
     )
 
     private val docFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.DOC_EXT }
@@ -109,16 +119,8 @@ class FileRepo(private val ctx: Context) {
     fun downloads(): List<FileItem> {
         val map = LinkedHashMap<String, FileItem>()
         if (Build.VERSION.SDK_INT >= 29) {
-            query(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                arrayOf(
-                    MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME,
-                    MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED,
-                    MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.MIME_TYPE
-                )
-            ).forEach { map[it.path] = it }
+            query(MediaStore.Downloads.EXTERNAL_CONTENT_URI).forEach { map[it.path] = it }
         }
-        // 最近新增的文件，任何目录
         val cutoff = System.currentTimeMillis() - 30L * 24 * 3600 * 1000
         allMediaFiles().forEach {
             if (it.modified >= cutoff) map[it.path] = it
@@ -149,7 +151,11 @@ class FileRepo(private val ctx: Context) {
                     mime = if (f.isDirectory) "" else TypeDetect.mimeOf(f.name)
                 )
             }
-            .sortedWith(compareByDescending<FileItem> { it.isDir }.thenByDescending { it.modified })
+            // 文件夹永远排在文件前面
+            .sortedWith(
+                compareByDescending<FileItem> { it.isDir }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+            )
     }
 
     fun installedApps(): List<FileItem> {
@@ -162,10 +168,9 @@ class FileRepo(private val ctx: Context) {
                     pm.getPackageInfo(ai.packageName, 0).versionName ?: ""
                 } catch (_: Exception) { "" }
                 val src = ai.publicSourceDir ?: ai.sourceDir ?: ""
-                val size = if (src.isNotEmpty()) File(src).length() else 0L
                 list.add(
                     FileItem(
-                        path = src, name = ai.packageName, size = size, modified = 0L,
+                        path = src, name = ai.packageName, size = 0L, modified = 0L,
                         id = ai.packageName, label = label, packageName = ai.packageName,
                         versionName = version,
                         extra = if (ai.flags and ApplicationInfo.FLAG_SYSTEM != 0) "系统应用" else "第三方应用"
@@ -218,39 +223,75 @@ class FileRepo(private val ctx: Context) {
     }
 
     fun storage(): StorageInfo {
-        return try {
-            val dir = Environment.getExternalStorageDirectory()
-            val stat = StatFs(dir.path)
-            StorageInfo(total = stat.blockCountLong * stat.blockSizeLong, free = stat.availableBlocksLong * stat.blockSizeLong)
+        var total = 0L
+        var free = 0L
+        try {
+            val stat = StatFs(Environment.getExternalStorageDirectory().path)
+            total = stat.blockCountLong * stat.blockSizeLong
+            free = stat.availableBlocksLong * stat.blockSizeLong
         } catch (_: Exception) {
-            StorageInfo()
         }
+        // 部分机型 StatFs 只给出 data 分区，容量偏小；尝试用 StorageStatsManager 拿到整机总容量
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val ssm = ctx.getSystemService(StorageStatsManager::class.java)
+                val bigger = ssm.getTotalBytes(StorageManager.UUID_DEFAULT)
+                if (bigger > total) {
+                    total = bigger
+                    free = ssm.getFreeBytes(StorageManager.UUID_DEFAULT)
+                }
+            } catch (_: Throwable) {
+            }
+        }
+        return StorageInfo(total = total, free = free)
     }
 
+    /** 首页统计：只统计数量，不加载列表、不做 File.exists() */
     fun counts(): Map<Cat, Int> {
         val map = HashMap<Cat, Int>()
-        map[Cat.IMAGE] = images().size
-        map[Cat.VIDEO] = videos().size
-        map[Cat.AUDIO] = audios().size
-        val all = allMediaFiles()
-        map[Cat.DOC] = all.count(docFilter)
-        map[Cat.ARCHIVE] = all.count(archiveFilter)
-        map[Cat.APP] = all.count(apkFilter) + installedApps().size
+        map[Cat.IMAGE] = countUri(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        map[Cat.VIDEO] = countUri(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        map[Cat.AUDIO] = countUri(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
+
+        var doc = 0
+        var archive = 0
+        var apk = 0
+        try {
+            resolver.query(
+                MediaStore.Files.getContentUri("external"),
+                arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+                null, null, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val n = c.getString(0) ?: continue
+                    val e = n.substringAfterLast('.', "").lowercase()
+                    when {
+                        e == "apk" -> apk++
+                        e in TypeDetect.ARCHIVE_EXT -> archive++
+                        e in TypeDetect.DOC_EXT -> doc++
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        map[Cat.DOC] = doc
+        map[Cat.ARCHIVE] = archive
+        map[Cat.APP] = apk + try { pm.getInstalledApplications(0).size } catch (_: Throwable) { 0 }
         map[Cat.FAV] = Prefs.favorites().size
-        map[Cat.DOWNLOAD] = downloads().size
+        map[Cat.DOWNLOAD] = if (Build.VERSION.SDK_INT >= 29) countUri(MediaStore.Downloads.EXTERNAL_CONTENT_URI) else 0
         return map
     }
 }
 
 object Sorter {
-    fun sort(items: List<FileItem>, mode: SortMode, asc: Boolean): List<FileItem> {
+    fun sort(items: List<FileItem>, mode: SortMode, asc: Boolean, dirsFirst: Boolean = false): List<FileItem> {
         val base = items.sortedWith(
             when (mode) {
                 SortMode.TIME -> compareBy { it.modified }
                 SortMode.SIZE -> compareBy { it.size }
                 SortMode.NAME -> compareBy(String.CASE_INSENSITIVE_ORDER) { it.name.ifEmpty { it.label } }
             }
-        )
-        return if (asc) base else base.reversed()
+        ).let { if (asc) it else it.reversed() }
+        return if (dirsFirst) base.sortedByDescending { it.isDir } else base
     }
 }

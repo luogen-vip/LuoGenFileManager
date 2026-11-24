@@ -1,6 +1,7 @@
 package com.luogen.filehub.ui
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,11 +9,16 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,8 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,7 +47,6 @@ import com.luogen.filehub.model.SortMode
 import com.luogen.filehub.model.nameNoExt
 import com.luogen.filehub.model.toDayTitle
 import com.luogen.filehub.model.toFullTime
-import com.luogen.filehub.model.toRelativeTime
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,22 +55,26 @@ import java.io.File
 
 data class Prog(val title: String, val progress: Float?, val msg: String)
 
+internal data class ActionSpec(val label: String, val icon: ImageVector, val run: () -> Unit)
+
 private data class DayGroup(val day: String, val list: List<FileItem>)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
-    var items by remember { mutableStateOf<List<FileItem>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
+    var appTab by remember { mutableStateOf(0) }
+    val cacheKey = "list:${cat.name}:$appTab"
+
+    var items by remember(cacheKey) { mutableStateOf(AppState.cached(cacheKey) ?: emptyList()) }
+    var loading by remember(cacheKey) { mutableStateOf(AppState.cached(cacheKey) == null) }
     var query by remember { mutableStateOf("") }
     var sortMode by remember { mutableStateOf(Prefs.sortMode()) }
     var asc by remember { mutableStateOf(Prefs.sortAsc()) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var refresh by remember { mutableStateOf(0) }
-    var appTab by remember { mutableStateOf(0) }
+    var force by remember { mutableStateOf(0) }
     var gridMode by remember { mutableStateOf(cat == Cat.IMAGE || cat == Cat.VIDEO) }
     var sortExpanded by remember { mutableStateOf(false) }
     var prog by remember { mutableStateOf<Prog?>(null) }
@@ -85,19 +94,20 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
 
     val root = android.os.Environment.getExternalStorageDirectory().absolutePath
 
-    LaunchedEffect(refresh, cat, appTab) {
-        loading = true
-        items = withContext(Dispatchers.IO) {
-            try {
-                when (cat) {
-                    Cat.TRASH -> TrashStore.list(ctx).map { it.toItem(ctx) }
-                    Cat.APP -> if (appTab == 0) repo.installedApps() else repo.apkFiles().map { repo.apkInfo(it.path) }
-                    else -> repo.load(cat)
-                }
-            } catch (_: Throwable) {
-                emptyList()
+    // 返回键：勾选中先取消勾选，再按才退出
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
+
+    LaunchedEffect(cacheKey, force) {
+        if (AppState.cached(cacheKey) == null) loading = true
+        val pair = AppState.load(cacheKey, force = force > 0, ttlMs = 3 * 60 * 1000L) {
+            when (cat) {
+                Cat.TRASH -> TrashStore.list(ctx).map { it.toItem(ctx) }
+                Cat.APP -> if (appTab == 0) repo.installedApps()
+                else repo.apkFiles().map { repo.apkInfo(it.path) }
+                else -> repo.load(cat)
             }
         }
+        items = pair.first
         loading = false
     }
 
@@ -123,6 +133,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     }
 
     val selItems = remember(selected, items) { items.filter { selected.contains(it.key) } }
+    val isAppInstalled = cat == Cat.APP && appTab == 0
 
     fun runOp(title: String, block: suspend (prog: (Float, String) -> Unit) -> String) {
         scope.launch {
@@ -134,45 +145,89 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             }
             prog = null
             toast = msg
-            refresh++
+            AppState.drop(cacheKey)
+            force++
             selected = emptySet()
         }
+    }
+
+    fun extractApks(list: List<FileItem>) {
+        scope.launch {
+            prog = Prog("正在提取安装包", null, "准备中…")
+            val msg = try {
+                withContext(Dispatchers.IO) {
+                    val dir = File(
+                        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                        "提取的安装包"
+                    )
+                    dir.mkdirs()
+                    var ok = 0
+                    list.forEach { it ->
+                        val src = File(it.path)
+                        if (src.exists()) {
+                            val out = FileOps.uniqueTarget(dir, "${it.label.ifEmpty { it.name }}.apk")
+                            src.copyTo(out, overwrite = true)
+                            ok++
+                        }
+                    }
+                    "已提取 $ok 个安装包到 Download/提取的安装包"
+                }
+            } catch (t: Throwable) {
+                "提取失败：${t.message ?: t.javaClass.simpleName}"
+            }
+            prog = null
+            toast = msg
+            selected = emptySet()
+        }
+    }
+
+    val listKey = "$cacheKey:list"
+    val listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
+    val gridState: LazyGridState = rememberLazyGridState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
+    }
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
     }
 
     Scaffold(
         containerColor = BgDeep,
         topBar = {
-            Column {
+            Column(Modifier.background(SurfaceDark)) {
                 TopAppBar(
                     title = {
                         Column {
                             Text(
                                 if (selected.isEmpty()) catTitle(cat, appTab) else "已选 ${selected.size} 项",
-                                 fontSize = 18.sp, fontWeight = FontWeight.Bold
+                                fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextMain
                             )
-                            Text(if (loading) "扫描中…" else "共 ${display.size} 项", fontSize = 11.sp, color = TextDim)
+                            Text(
+                                if (loading) "正在加载…" else "共 ${display.size} 项",
+                                fontSize = 11.sp, color = TextDim
+                            )
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null) }
+                        IconButton(onClick = {
+                            if (selected.isNotEmpty()) selected = emptySet() else nav.pop()
+                        }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
                     },
                     actions = {
                         IconButton(onClick = {
-                            selected = if (selected.size == display.size) {
-                                emptySet()
-                            } else display.map { it.key }.toSet()
-                        }) { Icon(Icons.Filled.Checklist, null) }
+                            selected = if (selected.size == display.size) emptySet() else display.map { it.key }.toSet()
+                        }) { Icon(Icons.Filled.Checklist, null, tint = TextMain) }
                         IconButton(onClick = { gridMode = !gridMode }) {
-                            Icon(if (gridMode) Icons.Filled.ViewList else Icons.Filled.GridView, null)
+                            Icon(if (gridMode) Icons.Filled.ViewList else Icons.Filled.GridView, null, tint = TextMain)
                         }
                         Box {
-                            IconButton(onClick = { sortExpanded = true }) { Icon(Icons.Filled.Sort, null) }
+                            IconButton(onClick = { sortExpanded = true }) { Icon(Icons.Filled.Sort, null, tint = TextMain) }
                             DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
                                 SortMode.values().forEach { m ->
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                m.title + if (sortMode == m) (if (asc) " ↑ 升序" else " ↓ 降序") else "",
+                                                m.title + if (sortMode == m) (if (asc) " ↑" else " ↓") else "",
                                                 fontWeight = if (sortMode == m) FontWeight.Bold else FontWeight.Normal
                                             )
                                         },
@@ -186,37 +241,54 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
                 )
 
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                    singleLine = true,
-                    placeholder = { Text("在「${cat.title}」里实时搜索…", fontSize = 13.sp) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, modifier = Modifier.size(18.dp)) },
-                    trailingIcon = {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
-                                Icon(Icons.Filled.Close, null, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBlue,
-                        unfocusedBorderColor = SurfaceDark2,
-                        focusedContainerColor = SurfaceDark,
-                        unfocusedContainerColor = SurfaceDark
-                    )
-                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(22))
+                        .background(SurfaceDark2)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Search, null, tint = TextDim, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.weight(1f)) {
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 13.sp)
+                        )
+                        if (query.isEmpty()) Text("在「${cat.title}」里搜索…", color = TextDim, fontSize = 13.sp)
+                    }
+                    if (query.isNotEmpty()) {
+                        Icon(
+                            Icons.Filled.Close, null, tint = TextDim,
+                            modifier = Modifier.size(17.dp).clickable { query = "" }
+                        )
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
 
                 if (cat == Cat.APP) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                        FilterChip(selected = appTab == 0, onClick = { appTab = 0 }, label = { Text("已安装") })
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        FilterChip(
+                            selected = appTab == 0,
+                            onClick = { appTab = 0; selected = emptySet() },
+                            label = { Text("已安装") },
+                            shape = RoundedCornerShape(20)
+                        )
                         Spacer(Modifier.width(8.dp))
-                        FilterChip(selected = appTab == 1, onClick = { appTab = 1 }, label = { Text("安装包") })
+                        FilterChip(
+                            selected = appTab == 1,
+                            onClick = { appTab = 1; selected = emptySet() },
+                            label = { Text("安装包") },
+                            shape = RoundedCornerShape(20)
+                        )
                     }
                 }
                 if (cat == Cat.FAV) {
@@ -228,49 +300,73 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                             FilterChip(
                                 selected = favFilter == f,
                                 onClick = { favFilter = f },
-                                label = { Text(if (f == null) "全部" else f.title) }
+                                label = { Text(if (f == null) "全部" else f.title) },
+                                shape = RoundedCornerShape(20)
                             )
                         }
                     }
                 }
+                Spacer(Modifier.height(6.dp))
             }
         },
         bottomBar = {
             if (selected.isNotEmpty()) {
-                SelectionBar(
-                    isTrash = cat == Cat.TRASH,
-                    onShare = { FileOps.share(ctx, selItems) },
-                    onCopy = { showCopy = true },
-                    onMove = { showMove = true },
-                    onDelete = { showDelete = true },
-                    onRename = {
-                        when {
-                            cat == Cat.TRASH -> toast = "回收站文件不能重命名，请先还原"
-                            selItems.size == 1 -> showRename = selItems[0]
-                            else -> showBatch = selItems
+                val actions: List<ActionSpec> = when {
+                    cat == Cat.TRASH -> listOf(
+                        ActionSpec("还原", Icons.Filled.RestoreFromTrash) { showRestoreConfirm = true },
+                        ActionSpec("彻底删除", Icons.Filled.DeleteForever) { showDelete = true },
+                        ActionSpec("详情", Icons.Filled.Info) {
+                            if (selItems.size == 1) showInfo = selItems[0] else toast = "只能看单个文件详情"
                         }
-                    },
-                    onFav = {
-                        selItems.forEach { Prefs.toggleFav(it.path) }
-                        toast = "收藏状态已更新"
-                        selected = emptySet()
-                    },
-                    onCompress = { showCompress = true },
-                    onRestore = { showRestoreConfirm = true },
-                    onInfo = { if (selItems.size == 1) showInfo = selItems[0] else toast = "只能看单个文件详情" },
-                    onRestoreDefault = { showRestoreDefaultConfirm = true }
-                )
+                    )
+                    isAppInstalled -> listOf(
+                        ActionSpec("卸载", Icons.Filled.Delete) {
+                            selItems.forEach { FileOps.uninstall(ctx, it.packageName) }
+                        },
+                        ActionSpec("提取安装包", Icons.Filled.SaveAlt) { extractApks(selItems) },
+                        ActionSpec("应用信息", Icons.Filled.Info) {
+                            selItems.firstOrNull()?.let { FileOps.openAppInfo(ctx, it.packageName) }
+                        },
+                        ActionSpec("详情", Icons.Filled.Description) {
+                            if (selItems.size == 1) showInfo = selItems[0] else toast = "只能看单个文件详情"
+                        }
+                    )
+                    else -> listOf(
+                        ActionSpec("分享", Icons.Filled.Share) { FileOps.share(ctx, selItems) },
+                        ActionSpec("复制", Icons.Filled.ContentCopy) { showCopy = true },
+                        ActionSpec("移动", Icons.Filled.DriveFileMove) { showMove = true },
+                        ActionSpec("删除", Icons.Filled.Delete) { showDelete = true },
+                        ActionSpec("重命名", Icons.Filled.DriveFileRenameOutline) {
+                            if (selItems.size == 1) showRename = selItems[0] else showBatch = selItems
+                        },
+                        ActionSpec("收藏", Icons.Filled.Bookmark) {
+                            selItems.forEach { Prefs.toggleFav(it.path) }
+                            toast = "收藏状态已更新"
+                            selected = emptySet()
+                        },
+                        ActionSpec(if (cat == Cat.ARCHIVE) "解压" else "压缩", Icons.Filled.FolderZip) {
+                            if (cat == Cat.ARCHIVE && selItems.size == 1) nav.push(Screen.ArchiveView(selItems[0].path))
+                            else showCompress = true
+                        },
+                        ActionSpec("恢复默认名", Icons.Filled.SettingsBackupRestore) { showRestoreDefaultConfirm = true },
+                        ActionSpec("详情", Icons.Filled.Info) {
+                            if (selItems.size == 1) showInfo = selItems[0] else toast = "只能看单个文件详情"
+                        }
+                    )
+                }
+                ActionPanel(actions)
             }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BrandBlue)
+                loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = BrandBlue, strokeWidth = 2.5.dp)
                 }
                 display.isEmpty() -> EmptyView(if (query.isNotEmpty()) "没有找到匹配的文件" else emptyText(cat))
                 gridMode -> {
                     LazyVerticalGrid(
+                        state = gridState,
                         columns = GridCells.Fixed(3),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(8.dp),
@@ -286,7 +382,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                         item = it0,
                                         selected = selected.contains(it0.key),
                                         selectionMode = selected.isNotEmpty(),
-                                        onOpen = { openItem(ctx, nav, it0, g.list) },
+                                        onOpen = { openByCat(ctx, nav, it0, g.list, cat, appTab, toast = { toast = it }) },
                                         onToggle = { toggleSel(selected, it0.key) { selected = it } }
                                     )
                                 }
@@ -298,7 +394,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                     item = it0,
                                     selected = selected.contains(it0.key),
                                     selectionMode = selected.isNotEmpty(),
-                                    onOpen = { openItem(ctx, nav, it0, display) },
+                                    onOpen = { openByCat(ctx, nav, it0, display, cat, appTab, toast = { toast = it }) },
                                     onToggle = { toggleSel(selected, it0.key) { selected = it } }
                                 )
                             }
@@ -306,20 +402,22 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     }
                 }
                 else -> {
-                    LazyColumn(Modifier.fillMaxSize()) {
+                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         if (grouped.isNotEmpty()) {
                             grouped.forEach { g ->
                                 item { DayHeader(g.day, g.list.size) }
                                 items(count = g.list.size, key = { idx -> g.list[idx].key }) { idx ->
                                     val it0 = g.list[idx]
                                     ListCell(
-                                        ctx = ctx, nav = nav, item = it0, siblings = g.list, cat = cat,
+                                        ctx = ctx, nav = nav, item = it0, siblings = g.list, cat = cat, appTab = appTab,
                                         selected = selected.contains(it0.key),
                                         selectionMode = selected.isNotEmpty(),
                                         onToggle = { toggleSel(selected, it0.key) { selected = it } },
                                         onInfo = { showInfo = it },
                                         onRename = { showRename = it },
-                                        onMsg = { toast = it }
+                                        onMsg = { toast = it },
+                                        onExtract = { extractApks(listOf(it0)) },
+                                        onRefresh = { AppState.drop(cacheKey); force++ }
                                     )
                                 }
                             }
@@ -327,17 +425,19 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                             items(count = display.size, key = { idx -> display[idx].key }) { idx ->
                                 val it0 = display[idx]
                                 ListCell(
-                                    ctx = ctx, nav = nav, item = it0, siblings = display, cat = cat,
+                                    ctx = ctx, nav = nav, item = it0, siblings = display, cat = cat, appTab = appTab,
                                     selected = selected.contains(it0.key),
                                     selectionMode = selected.isNotEmpty(),
                                     onToggle = { toggleSel(selected, it0.key) { selected = it } },
                                     onInfo = { showInfo = it },
                                     onRename = { showRename = it },
-                                    onMsg = { toast = it }
+                                    onMsg = { toast = it },
+                                    onExtract = { extractApks(listOf(it0)) },
+                                    onRefresh = { AppState.drop(cacheKey); force++ }
                                 )
                             }
                         }
-                        item { Spacer(Modifier.height(80.dp)) }
+                        item { Spacer(Modifier.height(16.dp)) }
                     }
                 }
             }
@@ -352,7 +452,8 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                 showRename = null
                 val err = FileOps.rename(item, newName)
                 toast = err ?: "已重命名"
-                refresh++
+                AppState.drop(cacheKey)
+                force++
             }
         )
     }
@@ -366,8 +467,9 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                 var ok = 0
                 pairs.forEach { (item, newName) -> if (FileOps.rename(item, newName) == null) ok++ }
                 toast = "批量重命名完成：$ok/${pairs.size}"
-                refresh++
+                AppState.drop(cacheKey)
                 selected = emptySet()
+                force++
             }
         )
     }
@@ -418,6 +520,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             danger = true,
             onDismiss = { showDelete = false },
             onConfirm = {
+                showDelete = false
                 val list = selItems
                 runOp(if (isTrash) "正在彻底删除" else "正在移入回收站") {
                     withContext(Dispatchers.IO) {
@@ -444,6 +547,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             text = "把选中的 ${selItems.size} 项还原到原来的位置。",
             onDismiss = { showRestoreConfirm = false },
             onConfirm = {
+                showRestoreConfirm = false
                 val list = selItems
                 runOp("正在还原") {
                     withContext(Dispatchers.IO) {
@@ -465,17 +569,13 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             text = "按记录的原始文件名恢复，并用文件头识别真实类型、自动修正扩展名。",
             onDismiss = { showRestoreDefaultConfirm = false },
             onConfirm = {
+                showRestoreDefaultConfirm = false
                 val list = selItems
                 runOp("正在恢复默认名") {
                     withContext(Dispatchers.IO) {
                         var ok = 0
-                        val lines = ArrayList<String>()
-                        list.forEach { s ->
-                            val r = FileOps.restoreDefault(s)
-                            lines.add("${s.name} → $r")
-                            if (r == null || r.startsWith("已恢复")) ok++
-                        }
-                        "处理完成：$ok/${list.size}\n" + lines.take(4).joinToString("\n")
+                        list.forEach { s -> if (FileOps.restoreDefault(s) == null) ok++ }
+                        "处理完成：$ok/${list.size}"
                     }
                 }
             }
@@ -483,12 +583,15 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     }
 
     if (showCompress) {
-        AlertDialog(
-            onDismissRequest = { showCompress = false },
-            title = { Text("压缩 ${selItems.size} 项") },
-            text = { Text("选择压缩格式：") },
-            confirmButton = { TextButton(onClick = { showCompress = false; compressFormat = "zip" }) { Text("ZIP") } },
-            dismissButton = { TextButton(onClick = { showCompress = false; compressFormat = "7z" }) { Text("7Z") } }
+        SelectDialog(
+            title = "压缩 ${selItems.size} 项",
+            message = "选择压缩格式",
+            options = listOf("ZIP（兼容性最好）" to "zip", "7Z（压缩率更高）" to "7z"),
+            onDismiss = { showCompress = false },
+            onPick = { fmt ->
+                showCompress = false
+                compressFormat = fmt
+            }
         )
     }
 
@@ -536,6 +639,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     toast?.let { t ->
         AlertDialog(
             onDismissRequest = { toast = null },
+            shape = RoundedCornerShape(22),
             title = { Text("提示") },
             text = { Text(t) },
             confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } }
@@ -565,6 +669,34 @@ internal fun toggleSel(current: Set<String>, key: String, setter: (Set<String>) 
     setter(if (current.contains(key)) current - key else current + key)
 }
 
+private fun openByCat(
+    ctx: Context,
+    nav: NavStack,
+    item: FileItem,
+    siblings: List<FileItem>,
+    cat: Cat,
+    appTab: Int,
+    toast: (String) -> Unit
+) {
+    if (cat == Cat.TRASH) {
+        toast("点右侧菜单可还原 / 彻底删除")
+        return
+    }
+    if (cat == Cat.APP) {
+        if (appTab == 1) {
+            if (!FileOps.installApk(ctx, item.path)) toast("已跳转授权，请允许安装未知应用后再点一次")
+        } else {
+            if (!FileOps.launchApp(ctx, item.packageName)) toast("打开失败")
+        }
+        return
+    }
+    if (item.isDir) {
+        nav.push(Screen.Browse(item.path))
+        return
+    }
+    openItem(ctx, nav, item, siblings)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GridCell(
@@ -577,7 +709,7 @@ private fun GridCell(
     Box(
         Modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12))
             .background(SurfaceDark)
             .combinedClickable(
                 onClick = { if (selectionMode) onToggle() else onOpen() },
@@ -602,7 +734,7 @@ private fun GridCell(
             Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
-                .background(Color(0xCC0B1220))
+                .background(Color(0x99000000))
                 .padding(horizontal = 6.dp, vertical = 4.dp)
         ) {
             Text(item.name, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White)
@@ -618,47 +750,63 @@ private fun ListCell(
     item: FileItem,
     siblings: List<FileItem>,
     cat: Cat,
+    appTab: Int,
     selected: Boolean,
     selectionMode: Boolean,
     onToggle: () -> Unit,
     onInfo: (FileItem) -> Unit,
     onRename: (FileItem) -> Unit,
-    onMsg: (String) -> Unit
+    onMsg: (String) -> Unit,
+    onExtract: () -> Unit,
+    onRefresh: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
+    val installed = cat == Cat.APP && appTab == 0
 
     FileRow(
         item = item,
         selected = selected,
         selectionMode = selectionMode,
         onClick = {
-            when {
-                selectionMode -> onToggle()
-                cat == Cat.TRASH -> onMsg("回收站：点右侧菜单可还原 / 彻底删除，长按可多选")
-                item.isDir -> nav.push(Screen.Browse(item.path))
-                cat == Cat.APP && item.path.endsWith(".apk", true) -> {
-                    if (!FileOps.installApk(ctx, item.path)) {
-                        onMsg("已跳转授权，请允许「安装未知应用」后再点一次")
-                    }
-                }
-                cat == Cat.APP && item.packageName.isNotEmpty() -> menu = true
-                else -> openItem(ctx, nav, item, siblings)
-            }
+            if (selectionMode) onToggle()
+            else openByCat(ctx, nav, item, siblings, cat, appTab, onMsg)
         },
         onLongClick = { if (!selectionMode) onToggle() },
         trailing = {
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null, tint = TextDim) }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(text = { Text("查看详细信息") }, onClick = { menu = false; onInfo(item) })
-                    if (cat == Cat.APP && item.packageName.isNotEmpty() && !item.path.endsWith(".apk", true)) {
+                DropdownMenu(
+                    expanded = menu,
+                    onDismissRequest = { menu = false },
+                    shape = RoundedCornerShape(16)
+                ) {
+                    DropdownMenuItem(text = { Text("详情") }, onClick = { menu = false; onInfo(item) })
+                    if (installed) {
                         DropdownMenuItem(text = { Text("打开应用") }, onClick = {
                             menu = false
                             if (!FileOps.launchApp(ctx, item.packageName)) onMsg("打开失败")
                         })
-                        DropdownMenuItem(text = { Text("应用设置") }, onClick = { menu = false; FileOps.openAppInfo(ctx, item.packageName) })
-                        DropdownMenuItem(text = { Text("卸载") }, onClick = { menu = false; FileOps.uninstall(ctx, item.packageName) })
+                        DropdownMenuItem(text = { Text("提取安装包") }, onClick = { menu = false; onExtract() })
+                        DropdownMenuItem(text = { Text("应用信息") }, onClick = {
+                            menu = false
+                            FileOps.openAppInfo(ctx, item.packageName)
+                        })
+                        DropdownMenuItem(text = { Text("卸载") }, onClick = {
+                            menu = false
+                            FileOps.uninstall(ctx, item.packageName)
+                        })
+                    } else if (cat == Cat.APP && appTab == 1) {
+                        DropdownMenuItem(text = { Text("安装") }, onClick = {
+                            menu = false
+                            if (!FileOps.installApk(ctx, item.path)) onMsg("请允许安装未知应用")
+                        })
+                        DropdownMenuItem(text = { Text("分享") }, onClick = { menu = false; FileOps.share(ctx, listOf(item)) })
+                        DropdownMenuItem(text = { Text("移入回收站") }, onClick = {
+                            menu = false
+                            onMsg(if (FileOps.deleteToTrash(ctx, listOf(item)) > 0) "已移入回收站" else "操作失败")
+                            onRefresh()
+                        })
                     }
                     if (cat == Cat.TRASH) {
                         DropdownMenuItem(text = { Text("还原") }, onClick = {
@@ -674,11 +822,12 @@ private fun ListCell(
                                 onMsg("已彻底删除")
                             }
                         })
-                    } else {
+                    } else if (!installed) {
                         DropdownMenuItem(text = { Text("重命名") }, onClick = { menu = false; onRename(item) })
                         DropdownMenuItem(text = { Text("恢复默认名") }, onClick = {
                             menu = false
                             onMsg(FileOps.restoreDefault(item) ?: "已恢复")
+                            onRefresh()
                         })
                         DropdownMenuItem(text = { Text(if (Prefs.isFav(item.path)) "取消收藏" else "收藏") }, onClick = {
                             menu = false
@@ -693,6 +842,7 @@ private fun ListCell(
                         DropdownMenuItem(text = { Text("移入回收站") }, onClick = {
                             menu = false
                             onMsg(if (FileOps.deleteToTrash(ctx, listOf(item)) > 0) "已移入回收站" else "操作失败")
+                            onRefresh()
                         })
                     }
                 }
@@ -702,51 +852,29 @@ private fun ListCell(
 }
 
 @Composable
-private fun SelectionBar(
-    isTrash: Boolean,
-    onShare: () -> Unit,
-    onCopy: () -> Unit,
-    onMove: () -> Unit,
-    onDelete: () -> Unit,
-    onRename: () -> Unit,
-    onFav: () -> Unit,
-    onCompress: () -> Unit,
-    onRestore: () -> Unit,
-    onInfo: () -> Unit,
-    onRestoreDefault: () -> Unit
-) {
-    Surface(color = SurfaceDark) {
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 4.dp)
-        ) {
-            if (isTrash) {
-                BarAction("还原", Icons.Filled.RestoreFromTrash, onRestore)
-                BarAction("彻底删除", Icons.Filled.DeleteForever, onDelete)
-                BarAction("详情", Icons.Filled.Info, onInfo)
-            } else {
-                BarAction("分享", Icons.Filled.Share, onShare)
-                BarAction("复制", Icons.Filled.ContentCopy, onCopy)
-                BarAction("移动", Icons.Filled.DriveFileMove, onMove)
-                BarAction("删除", Icons.Filled.Delete, onDelete)
-                BarAction("重命名", Icons.Filled.DriveFileRenameOutline, onRename)
-                BarAction("收藏", Icons.Filled.Star, onFav)
-                BarAction("压缩", Icons.Filled.Archive, onCompress)
-                BarAction("恢复默认", Icons.Filled.SettingsBackupRestore, onRestoreDefault)
-                BarAction("详情", Icons.Filled.Info, onInfo)
+internal fun ActionPanel(actions: List<ActionSpec>) {
+    Surface(color = SurfaceDark, shadowElevation = 8.dp) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp)) {
+            actions.chunked(5).forEach { rowActions ->
+                Row(Modifier.fillMaxWidth()) {
+                    rowActions.forEach { act ->
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12))
+                                .clickable(onClick = act.run)
+                                .padding(vertical = 6.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(act.icon, null, tint = BrandBlue, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.height(3.dp))
+                            Text(act.label, fontSize = 10.sp, color = TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    repeat(5 - rowActions.size) { Spacer(Modifier.weight(1f)) }
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun BarAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    Column(
-        Modifier.width(64.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(icon, null, tint = BrandBlue, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.height(3.dp))
-        Text(label, fontSize = 10.sp, color = TextDim, maxLines = 1)
     }
 }
 

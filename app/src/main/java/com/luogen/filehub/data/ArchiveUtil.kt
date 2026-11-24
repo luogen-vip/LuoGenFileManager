@@ -197,6 +197,34 @@ object ArchiveUtil {
         }
     }
 
+    /** 只解压其中一个条目（zip/7z 支持精确解压，其余格式回退为整体解压） */
+    fun extractOne(file: File, entryName: String, destDir: File): ArchiveResult {
+        return try {
+            if (!destDir.exists()) destDir.mkdirs()
+            val target = File(destDir, entryName)
+            val e = extOf(file.name)
+            if (e in ZIPLIKE) {
+                ZipFile(file).use { zf ->
+                    val z = zf.getEntry(entryName)
+                        ?: return ArchiveResult(false, "压缩包里没有这个文件")
+                    if (z.isDirectory) {
+                        target.mkdirs()
+                        return ArchiveResult(true, "已创建目录", count = 0)
+                    }
+                    target.parentFile?.mkdirs()
+                    zf.getInputStream(z).use { ins ->
+                        target.outputStream().use { outs -> ins.copyTo(outs) }
+                    }
+                }
+                ArchiveResult(true, "已解压 $entryName", count = 1)
+            } else {
+                extract(file, destDir)
+            }
+        } catch (t: Throwable) {
+            ArchiveResult(false, "解压失败：${t.message ?: t.javaClass.simpleName}")
+        }
+    }
+
     private fun estimateTotal(file: File): Long {
         return try {
             val e = extOf(file.name)

@@ -50,8 +50,9 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
 
     LaunchedEffect(refresh) {
         loading = true
+        try {
         withContext(Dispatchers.IO) {
-            val st = repo.storage()
+            val st = try { repo.storage() } catch (_: Throwable) { StorageInfo() }
             val sizes = HashMap<Cat, Long>()
             sizes[Cat.IMAGE] = repo.images().sumOf { it.size }
             sizes[Cat.VIDEO] = repo.videos().sumOf { it.size }
@@ -93,15 +94,19 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                     "安全", "本应用产生的临时缓存，可随时清理"
                 ))
             }
-            val appList = repo.installedApps().sortedByDescending { it.size }.take(60)
+            val appList = repo.installedApps().take(80)
 
             withContext(Dispatchers.Main) {
                 storage = st
                 catSizes = sizes
                 junk = junkList.sortedByDescending { it.item.size }
                 apps = appList
-                loading = false
             }
+        }
+        } catch (t: Throwable) {
+            toast = "统计部分失败：${t.message ?: t.javaClass.simpleName}"
+        } finally {
+            loading = false
         }
     }
 
@@ -115,8 +120,8 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                         Text("已用 ${storage.used.toSizeText()} / 共 ${storage.total.toSizeText()}", fontSize = 11.sp, color = TextDim)
                     }
                 },
-                navigationIcon = { IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null) } },
-                actions = { IconButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null) } },
+                navigationIcon = { IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) } },
+                actions = { IconButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null, tint = TextMain) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
             )
         },

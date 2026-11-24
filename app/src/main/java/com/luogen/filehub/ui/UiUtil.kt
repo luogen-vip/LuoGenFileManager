@@ -44,67 +44,74 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 fun catIcon(cat: Cat): ImageVector = when (cat) {
-    Cat.IMAGE -> Icons.Filled.Image
-    Cat.VIDEO -> Icons.Filled.Movie
-    Cat.AUDIO -> Icons.Filled.MusicNote
-    Cat.DOC -> Icons.Filled.Description
-    Cat.APP -> Icons.Filled.Android
-    Cat.ARCHIVE -> Icons.Filled.Archive
-    Cat.FAV -> Icons.Filled.Star
-    Cat.DOWNLOAD -> Icons.Filled.Download
-    Cat.TRASH -> Icons.Filled.Delete
-    Cat.VAULT -> Icons.Filled.Lock
-    Cat.CLEAN -> Icons.Filled.DeleteSweep
-    Cat.FILE -> Icons.Filled.Folder
+    Cat.IMAGE -> Icons.Filled.Photo
+    Cat.VIDEO -> Icons.Filled.Videocam
+    Cat.AUDIO -> Icons.Filled.Audiotrack
+    Cat.DOC -> Icons.Filled.Article
+    Cat.APP -> Icons.Filled.Apps
+    Cat.ARCHIVE -> Icons.Filled.FolderZip
+    Cat.FAV -> Icons.Filled.Bookmark
+    Cat.DOWNLOAD -> Icons.Filled.CloudDownload
+    Cat.TRASH -> Icons.Filled.DeleteOutline
+    Cat.VAULT -> Icons.Filled.Shield
+    Cat.CLEAN -> Icons.Filled.CleaningServices
+    Cat.FILE -> Icons.Filled.FolderOpen
 }
 
 fun catColor(cat: Cat): Color = when (cat) {
-    Cat.IMAGE -> Color(0xFF60A5FA)
-    Cat.VIDEO -> Color(0xFFF472B6)
-    Cat.AUDIO -> Color(0xFFA78BFA)
-    Cat.DOC -> Color(0xFF34D399)
-    Cat.APP -> Color(0xFFFB923C)
-    Cat.ARCHIVE -> Color(0xFFFBBF24)
-    Cat.FAV -> Color(0xFFFACC15)
-    Cat.DOWNLOAD -> Color(0xFF38BDF8)
-    Cat.TRASH -> Color(0xFFF87171)
-    Cat.VAULT -> Color(0xFF22D3EE)
-    Cat.CLEAN -> Color(0xFF94A3B8)
-    Cat.FILE -> Color(0xFF93C5FD)
+    Cat.IMAGE -> Color(0xFF2563EB)
+    Cat.VIDEO -> Color(0xFFDB2777)
+    Cat.AUDIO -> Color(0xFF7C3AED)
+    Cat.DOC -> Color(0xFF0E9F6E)
+    Cat.APP -> Color(0xFFEA580C)
+    Cat.ARCHIVE -> Color(0xFFB45309)
+    Cat.FAV -> Color(0xFFD97706)
+    Cat.DOWNLOAD -> Color(0xFF0284C7)
+    Cat.TRASH -> Color(0xFFDC2626)
+    Cat.VAULT -> Color(0xFF0F766E)
+    Cat.CLEAN -> Color(0xFF475569)
+    Cat.FILE -> Color(0xFF2563EB)
 }
 
 fun itemCat(item: FileItem): Cat {
     if (item.isDir) return Cat.FILE
+    // 已安装应用（有包名）或 apk 文件都算“应用”
+    if (item.packageName.isNotEmpty() || item.ext == "apk") return Cat.APP
     return TypeDetect.catOf(item.name, item.mime)
 }
 
 fun itemIcon(item: FileItem): ImageVector {
-    if (item.isDir) return Icons.Filled.Folder
+    if (item.isDir) return Icons.Filled.FolderOpen
     return when (itemCat(item)) {
-        Cat.IMAGE -> Icons.Filled.Image
-        Cat.VIDEO -> Icons.Filled.Movie
-        Cat.AUDIO -> Icons.Filled.MusicNote
-        Cat.DOC -> Icons.Filled.Description
-        Cat.ARCHIVE -> Icons.Filled.Archive
-        Cat.APP -> Icons.Filled.Android
-        else -> Icons.Filled.InsertDriveFile
+        Cat.IMAGE -> Icons.Filled.Photo
+        Cat.VIDEO -> Icons.Filled.Videocam
+        Cat.AUDIO -> Icons.Filled.Audiotrack
+        Cat.DOC -> Icons.Filled.Article
+        Cat.ARCHIVE -> Icons.Filled.FolderZip
+        Cat.APP -> Icons.Filled.Apps
+        else -> Icons.Filled.Description
     }
 }
 
 object Thumbs {
-    private val cache = object : LruCache<String, ImageBitmap>(30) {}
+    private val cache = object : LruCache<String, ImageBitmap>(
+        (Runtime.getRuntime().maxMemory() / 1024 / 8).toInt()
+    ) {}
+    private val failed = HashSet<String>()
 
     fun peek(key: String): ImageBitmap? = cache.get(key)
 
     suspend fun load(ctx: Context, path: String, isVideo: Boolean, req: Int = 320): ImageBitmap? {
         val key = "$req|$path"
         cache.get(key)?.let { return it }
+        if (failed.contains(key)) return null
         return withContext(Dispatchers.IO) {
             val bmp = try {
                 if (isVideo) videoThumb(path, req) else imageThumb(ctx, path, req)
             } catch (_: Throwable) {
                 null
             }
+            if (bmp == null) failed.add(key)
             bmp?.let {
                 val ib = it.asImageBitmap()
                 cache.put(key, ib)
@@ -165,7 +172,12 @@ object Thumbs {
 }
 
 object AppIcons {
-    private val cache = object : LruCache<String, ImageBitmap>(60) {}
+    fun peek(item: FileItem, size: Int = 128): ImageBitmap? =
+        cache.get((item.packageName.ifEmpty { item.path }) + "@" + size)
+
+    private val cache = object : LruCache<String, ImageBitmap>(
+        (Runtime.getRuntime().maxMemory() / 1024 / 16).toInt()
+    ) {}
 
     suspend fun load(ctx: Context, item: FileItem, size: Int = 128): ImageBitmap? {
         val key = (item.packageName.ifEmpty { item.path }) + "@" + size
@@ -203,10 +215,12 @@ fun ThumbBox(
     contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
-    var bmp by remember(item.path) { mutableStateOf(Thumbs.peek("320|${item.path}")) }
+    val cat = itemCat(item)
+    var bmp by remember(item.path) { mutableStateOf(if (cat == Cat.APP) AppIcons.peek(item) else Thumbs.peek("320|${item.path}")) }
     LaunchedEffect(item.path) {
         if (bmp == null) {
-            bmp = if (itemCat(item) == Cat.APP) AppIcons.load(ctx, item) else Thumbs.load(ctx, item.path, itemCat(item) == Cat.VIDEO)
+            bmp = if (cat == Cat.APP) AppIcons.load(ctx, item)
+            else Thumbs.load(ctx, item.path, cat == Cat.VIDEO)
         }
     }
     Box(
@@ -253,7 +267,7 @@ fun FileRow(
             Modifier.size(44.dp),
             contentAlignment = Alignment.Center
         ) {
-            if (itemCat(item) == Cat.IMAGE || itemCat(item) == Cat.VIDEO || itemCat(item) == Cat.APP) {
+            if (itemCat(item) in listOf(Cat.IMAGE, Cat.VIDEO, Cat.APP)) {
                 ThumbBox(Modifier.size(44.dp), item)
             } else {
                 Box(
