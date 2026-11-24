@@ -14,6 +14,7 @@ import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.SortMode
 import com.luogen.filehub.model.StorageInfo
+import com.luogen.filehub.model.VolumeInfo
 import com.luogen.filehub.model.extOf
 import java.io.File
 
@@ -170,7 +171,7 @@ class FileRepo(private val ctx: Context) {
                 val src = ai.publicSourceDir ?: ai.sourceDir ?: ""
                 list.add(
                     FileItem(
-                        path = src, name = ai.packageName, size = 0L, modified = 0L,
+                        path = src, name = ai.packageName, size = File(src).length(), modified = 0L,
                         id = ai.packageName, label = label, packageName = ai.packageName,
                         versionName = version,
                         extra = if (ai.flags and ApplicationInfo.FLAG_SYSTEM != 0) "系统应用" else "第三方应用"
@@ -244,6 +245,61 @@ class FileRepo(private val ctx: Context) {
             }
         }
         return StorageInfo(total = total, free = free)
+    }
+
+    /** 外部存储卷：内部存储 + U 盘 / SD 卡（插拔后调用可即时反映） */
+    fun volumes(): List<VolumeInfo> {
+        val out = ArrayList<VolumeInfo>()
+        try {
+            val sm = ctx.getSystemService(StorageManager::class.java)
+            val ssm = if (Build.VERSION.SDK_INT >= 26) ctx.getSystemService(StorageStatsManager::class.java) else null
+            val primary = Environment.getExternalStorageDirectory().absolutePath
+            sm.storageVolumes.forEach { v ->
+                var dir: File? = null
+                try {
+                    if (Build.VERSION.SDK_INT >= 30) dir = v.directory
+                    else {
+                        val m = v.javaClass.getMethod("getPathFile")
+                        dir = m.invoke(v) as? File
+                    }
+                } catch (_: Throwable) {
+                }
+                val state = v.state
+                if (dir == null || !dir.exists() || state != Environment.MEDIA_MOUNTED) return@forEach
+                var total = 0L; var free = 0L
+                try {
+                    ssm?.let {
+                        total = it.getTotalBytes(v.uuid)
+                        free = it.getFreeBytes(v.uuid)
+                    }
+                } catch (_: Throwable) {}
+                if (total <= 0) {
+                    try {
+                        val st = StatFs(dir.absolutePath)
+                        total = st.blockCountLong * st.blockSizeLong
+                        free = st.availableBlocksLong * st.blockSizeLong
+                    } catch (_: Throwable) {}
+                }
+                val isPrimary = dir.absolutePath == primary
+                val label = try { v.getDescription(ctx) } catch (_: Throwable) { "" }
+                out.add(
+                    VolumeInfo(
+                        id = v.uuid ?: dir.absolutePath,
+                        name = if (isPrimary) "内部存储" else label.ifEmpty { "U盘 / SD卡" },
+                        path = dir.absolutePath,
+                        total = total, free = free, removable = v.isRemovable
+                    )
+                )
+            }
+        } catch (_: Throwable) {
+        }
+        if (out.none { it.path == Environment.getExternalStorageDirectory().absolutePath }) {
+            val s = storage()
+            out.add(0, VolumeInfo(id = "primary", name = "内部存储",
+                path = Environment.getExternalStorageDirectory().absolutePath,
+                total = s.total, free = s.free, removable = false))
+        }
+        return out.sortedBy { it.removable }
     }
 
     /** 首页统计：只统计数量，不加载列表、不做 File.exists() */

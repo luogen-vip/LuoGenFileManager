@@ -2,6 +2,7 @@ package com.luogen.filehub.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -128,6 +129,7 @@ fun BatchRenameDialog(
 fun DestPickerDialog(
     title: String,
     startDir: String,
+    volumes: List<com.luogen.filehub.model.VolumeInfo> = emptyList(),
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
@@ -147,6 +149,22 @@ fun DestPickerDialog(
         title = { Text(title) },
         text = {
             Column(Modifier.heightIn(max = 420.dp)) {
+                if (volumes.isNotEmpty()) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        volumes.forEach { v ->
+                            val active = current.absolutePath.startsWith(v.path)
+                            androidx.compose.material3.AssistChip(
+                                onClick = { current = java.io.File(v.path) },
+                                label = { Text(if (v.removable) (v.name + " (U盘)") else v.name, fontSize = 12.sp) },
+                                shape = RoundedCornerShape(20),
+                                colors = androidx.compose.material3.AssistChipDefaults.assistChipColors(
+                                    containerColor = if (active) BrandBlue.copy(alpha = 0.12f) else SurfaceDark2
+                                )
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
                 Text(current.absolutePath, color = TextDim, fontSize = 11.sp, maxLines = 2)
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {

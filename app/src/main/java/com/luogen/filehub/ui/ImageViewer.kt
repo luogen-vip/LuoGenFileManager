@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -207,6 +210,13 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     var results by remember { mutableStateOf<List<FileItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var searched by remember { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        delay(120)
+        try { focus.requestFocus() } catch (_: Throwable) {}
+        keyboard?.show()
+    }
 
     // 边打边搜：MediaStore 的 LIKE 查询，不再全盘索引
     LaunchedEffect(query) {
@@ -252,6 +262,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                                 value = query,
                                 onValueChange = { query = it },
                                 singleLine = true,
+                                modifier = Modifier.focusRequester(focus),
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 14.sp)
                             )
                             if (query.isEmpty()) Text("搜索全部文件", color = TextDim, fontSize = 13.sp)

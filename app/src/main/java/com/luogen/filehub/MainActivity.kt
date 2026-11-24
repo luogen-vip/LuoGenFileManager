@@ -148,6 +148,7 @@ sealed class Screen {
     data class PdfView(val path: String) : Screen()
     data class ArchiveView(val path: String) : Screen()
     data class GlobalSearch(val query: String) : Screen()
+    data class CleanCat(val cat: com.luogen.filehub.model.Cat) : Screen()
     object Vault : Screen()
     data class VaultViewer(val cachedPath: String, val name: String) : Screen()
 }

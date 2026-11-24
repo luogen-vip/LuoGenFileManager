@@ -37,9 +37,9 @@ data class JunkItem(val item: FileItem, val level: String, val reason: String)
 @Composable
 fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
     val scope = rememberCoroutineScope()
-    var loading by remember { mutableStateOf(true) }
-    var storage by remember { mutableStateOf(StorageInfo()) }
-    var catSizes by remember { mutableStateOf(mapOf<Cat, Long>()) }
+    var loading by remember { mutableStateOf(AppState.cleanSizes == null) }
+    var storage by remember { mutableStateOf(AppState.storage ?: StorageInfo()) }
+    var catSizes by remember { mutableStateOf(AppState.cleanSizes ?: mapOf<Cat, Long>()) }
     var junk by remember { mutableStateOf<List<JunkItem>>(emptyList()) }
     var apps by remember { mutableStateOf<List<FileItem>>(emptyList()) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -48,8 +48,9 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
     var refresh by remember { mutableStateOf(0) }
     var showUninstall by remember { mutableStateOf<FileItem?>(null) }
 
-    LaunchedEffect(refresh) {
-        loading = true
+    LaunchedEffect(refresh, AppState.cleanDirty) {
+        val silent = AppState.cleanSizes != null
+        if (!silent) loading = true
         try {
         withContext(Dispatchers.IO) {
             val st = try { repo.storage() } catch (_: Throwable) { StorageInfo() }
@@ -99,6 +100,9 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             withContext(Dispatchers.Main) {
                 storage = st
                 catSizes = sizes
+                AppState.storeStorage(st)
+                AppState.cleanSizes = sizes
+                AppState.cleanDirty = false
                 junk = junkList.sortedByDescending { it.item.size }
                 apps = appList
             }
@@ -145,9 +149,15 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                                         }
                                     }
                                     prog = null
-                                    toast = "已清理 $ok 项"
+                                    val removedKeys = selJunk.map { it.item.key }.toSet()
+                                    junk = junk.filterNot { removedKeys.contains(it.item.key) }
+                                    storage = try { repo.storage() } catch (_: Throwable) { storage }
+                                    catSizes = catSizes.toMutableMap().apply {
+                                        this[Cat.TRASH] = TrashStore.totalSize(ctx)
+                                        this[Cat.VAULT] = VaultStore.totalSize(ctx)
+                                    }
+                                    toast = "已清理 $ok 项，存储空间已更新"
                                     selected = emptySet()
-                                    refresh++
                                 }
                             },
                             modifier = Modifier.weight(1f)
@@ -184,11 +194,23 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                     item { SectionTitle("各类文件占用") }
                     items(count = catSizes.size) { idx ->
                         val entry = catSizes.entries.elementAt(idx)
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clickable {
+                                    if (entry.key == Cat.APP) nav.push(Screen.CatList(Cat.APP))
+                                    else nav.push(Screen.CleanCat(entry.key))
+                                }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(catIcon(entry.key), null, tint = catColor(entry.key), modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
-                            Text(entry.key.title, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.key.title, fontSize = 13.sp)
+                                Text("点进去可查看并按安全等级清理", fontSize = 10.sp, color = TextDim)
+                            }
                             Text(entry.value.toSizeText(), color = TextDim, fontSize = 12.sp)
+                            Icon(Icons.Filled.ChevronRight, null, tint = TextDim, modifier = Modifier.size(16.dp))
                         }
                     }
 
@@ -229,7 +251,17 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                         }
                     }
 
-                    item { SectionTitle("已安装应用（按占用排序）") }
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { nav.push(Screen.CatList(Cat.APP)) }
+                                .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("已安装应用（按占用排序）", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text("全部管理", color = BrandBlue, fontSize = 11.sp)
+                            Icon(Icons.Filled.ChevronRight, null, tint = BrandBlue, modifier = Modifier.size(14.dp))
+                        }
+                    }
                     items(count = apps.size) { idx ->
                         val a = apps[idx]
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

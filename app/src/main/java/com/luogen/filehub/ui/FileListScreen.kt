@@ -190,9 +190,23 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
     }
+    // 换排序 / 搜索 / 切换已安装·安装包：回到列表最顶部
+    LaunchedEffect(sortMode, asc, query, appTab, gridMode) {
+        try { listState.scrollToItem(0) } catch (_: Throwable) {}
+        try { gridState.scrollToItem(0) } catch (_: Throwable) {}
+    }
 
     Scaffold(
         containerColor = BgDeep,
+        floatingActionButton = {
+            val atTop = listState.firstVisibleItemIndex <= 4 && gridState.firstVisibleItemIndex <= 4
+            if (!atTop) {
+                SmallFloatingActionButton(
+                    onClick = { scope.launch { listState.animateScrollToItem(0); gridState.animateScrollToItem(0) } },
+                    containerColor = SurfaceDark, contentColor = BrandBlue
+                ) { Icon(Icons.Filled.VerticalAlignTop, null) }
+            }
+        },
         topBar = {
             Column(Modifier.background(SurfaceDark)) {
                 TopAppBar(
@@ -478,6 +492,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         DestPickerDialog(
             title = "复制 ${selItems.size} 项到",
             startDir = root,
+            volumes = remember { try { repo.volumes() } catch (_: Throwable) { emptyList() } },
             onDismiss = { showCopy = false },
             onPick = { dest ->
                 showCopy = false
@@ -496,6 +511,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         DestPickerDialog(
             title = "移动 ${selItems.size} 项到",
             startDir = root,
+            volumes = remember { try { repo.volumes() } catch (_: Throwable) { emptyList() } },
             onDismiss = { showMove = false },
             onPick = { dest ->
                 showMove = false
@@ -553,10 +569,14 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     withContext(Dispatchers.IO) {
                         val entries = TrashStore.list(ctx)
                         var ok = 0
+                        var failMsg = ""
                         list.forEach { s ->
-                            entries.firstOrNull { it.id == s.id }?.let { if (TrashStore.restore(ctx, it)) ok++ }
+                            entries.firstOrNull { it.id == s.id }?.let { e ->
+                                val err = TrashStore.restore(ctx, e)
+                                if (err == null) ok++ else failMsg = err
+                            }
                         }
-                        "已还原 $ok 项"
+                        if (ok > 0) "已还原 $ok 项" else failMsg.ifEmpty { "还原失败" }
                     }
                 }
             }
@@ -599,6 +619,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         DestPickerDialog(
             title = "压缩文件保存到",
             startDir = root,
+            volumes = remember { try { repo.volumes() } catch (_: Throwable) { emptyList() } },
             onDismiss = { compressFormat = null },
             onPick = { dest ->
                 val list = selItems
@@ -812,7 +833,7 @@ private fun ListCell(
                         DropdownMenuItem(text = { Text("还原") }, onClick = {
                             menu = false
                             TrashStore.list(ctx).firstOrNull { it.id == item.id }?.let {
-                                onMsg(if (TrashStore.restore(ctx, it)) "已还原" else "还原失败")
+                                onMsg(TrashStore.restore(ctx, it) ?: "已还原")
                             }
                         })
                         DropdownMenuItem(text = { Text("彻底删除") }, onClick = {

@@ -40,3 +40,14 @@ data class FileItem(
 data class StorageInfo(val total: Long = 0L, val free: Long = 0L) {
     val used: Long get() = (total - free).coerceAtLeast(0L)
 }
+
+data class VolumeInfo(
+    val id: String = "",
+    val name: String = "",
+    val path: String = "",
+    val total: Long = 0L,
+    val free: Long = 0L,
+    val removable: Boolean = false
+) {
+    val used: Long get() = (total - free).coerceAtLeast(0L)
+}

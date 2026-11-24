@@ -3,6 +3,8 @@ package com.luogen.filehub.ui
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,7 +67,21 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     var showInfo by remember { mutableStateOf<FileItem?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var prog by remember { mutableStateOf<Prog?>(null) }
+    var sortExpanded by remember { mutableStateOf(false) }
     val startPath = dirPath
+    val rootPath = android.os.Environment.getExternalStorageDirectory().absolutePath
+    var volumes by remember { mutableStateOf<List<com.luogen.filehub.model.VolumeInfo>>(emptyList()) }
+    LaunchedEffect(current.absolutePath) {
+        volumes = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
+    }
+    val listKey = "browse:$startPath"
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
+    }
+    LaunchedEffect(sortMode, asc, query) {
+        try { listState.scrollToItem(0) } catch (_: Throwable) {}
+    }
 
     // 返回键：有勾选先取消勾选
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
@@ -114,10 +134,24 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                         IconButton(onClick = {
                             selected = if (selected.size == display.size) emptySet() else display.map { it.key }.toSet()
                         }) { Icon(Icons.Filled.Checklist, null, tint = TextMain) }
-                        IconButton(onClick = {
-                            sortMode = if (sortMode == SortMode.TIME) SortMode.NAME else SortMode.TIME
-                            Prefs.setSort(sortMode, asc)
-                        }) { Icon(Icons.Filled.Sort, null, tint = TextMain) }
+                        Box {
+                            IconButton(onClick = { sortExpanded = true }) { Icon(Icons.Filled.Sort, null, tint = TextMain) }
+                            DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }, shape = RoundedCornerShape(16)) {
+                                SortMode.values().forEach { m ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(m.title + if (sortMode == m) (if (asc) " ↑" else " ↓") else "",
+                                                fontWeight = if (sortMode == m) FontWeight.Bold else FontWeight.Normal)
+                                        },
+                                        onClick = {
+                                            if (sortMode == m) asc = !asc else { sortMode = m; asc = false }
+                                            Prefs.setSort(sortMode, asc)
+                                            sortExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         IconButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null, tint = TextMain) }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
@@ -152,11 +186,18 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         },
         floatingActionButton = {
             Column {
-                SmallFloatingActionButton(onClick = { showNewFile = true; newName = "" }) {
+                if (listState.firstVisibleItemIndex > 5) {
+                    SmallFloatingActionButton(
+                        onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                        containerColor = SurfaceDark, contentColor = BrandBlue
+                    ) { Icon(Icons.Filled.VerticalAlignTop, null) }
+                    Spacer(Modifier.height(8.dp))
+                }
+                SmallFloatingActionButton(onClick = { newName = ""; showNewFile = true }) {
                     Icon(Icons.Filled.NoteAdd, null)
                 }
                 Spacer(Modifier.height(8.dp))
-                FloatingActionButton(onClick = { showNewFolder = true; newName = "" }) {
+                FloatingActionButton(onClick = { newName = ""; showNewFolder = true }) {
                     Icon(Icons.Filled.CreateNewFolder, null)
                 }
             }
@@ -188,12 +229,33 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
             if (display.isEmpty()) {
                 EmptyView(if (query.isNotEmpty()) "没有匹配项" else "这个文件夹是空的")
             } else {
-                val listKey = "browse:" + startPath
-                val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
-                LaunchedEffect(listState) {
-                    snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
-                }
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    if (current.absolutePath == rootPath) {
+                        val extraVols = volumes.filter { it.removable }
+                        items(count = extraVols.size, key = { "vol_" + extraVols[it].path }) { idx ->
+                            val v = extraVols[idx]
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .clickable { current = File(v.path) }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    Modifier.size(44.dp).background(BrandBlue.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) { Icon(Icons.Filled.Usb, null, tint = BrandBlue, modifier = Modifier.size(24.dp)) }
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(v.name, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        if (v.total > 0) "U盘 · 剩余 ${v.free.toSizeText()} / 共 ${v.total.toSizeText()}" else "U盘",
+                                        fontSize = 11.sp, color = TextDim
+                                    )
+                                }
+                                Icon(Icons.Filled.ChevronRight, null, tint = TextDim, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
                     items(count = display.size, key = { display[it].key }) { idx ->
                         val item = display[idx]
                         var menu by remember { mutableStateOf(false) }
@@ -254,46 +316,58 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         }
     }
 
-    if (showNewFolder) {
+    if (showNewFolder || showNewFile) {
+        val isFolder = showNewFolder
+        val focus = remember { FocusRequester() }
+        val keyboard = LocalSoftwareKeyboardController.current
+        LaunchedEffect(Unit) {
+            focus.requestFocus()
+            keyboard?.show()
+        }
         AlertDialog(
-            onDismissRequest = { showNewFolder = false },
+            onDismissRequest = { showNewFolder = false; showNewFile = false },
             shape = RoundedCornerShape(22.dp),
-            title = { Text("新建文件夹") },
-            text = { OutlinedTextField(value = newName, onValueChange = { newName = it }, singleLine = true, label = { Text("文件夹名") }) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val f = FileOps.createFolder(current, newName)
-                    showNewFolder = false
-                    if (f != null) { toast = "已创建 ${f.name}"; refresh++ } else toast = "创建失败（可能已存在）"
-                }) { Text("创建") }
-            },
-            dismissButton = { TextButton(onClick = { showNewFolder = false }) { Text("取消") } }
-        )
-    }
-
-    if (showNewFile) {
-        AlertDialog(
-            onDismissRequest = { showNewFile = false },
-            shape = RoundedCornerShape(22.dp),
-            title = { Text("新建文件") },
+            title = { Text(if (isFolder) "新建文件夹" else "新建文件") },
             text = {
                 Column {
-                    OutlinedTextField(value = newName, onValueChange = { newName = it }, singleLine = true, label = { Text("文件名（含扩展名，如 note.txt）") })
-                    Text("文本类文件创建后可直接编辑；其他类型会创建空文件。", fontSize = 11.sp, color = TextDim)
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                        placeholder = { Text(if (isFolder) "输入文件夹名" else "输入文件名，如 note.txt", fontSize = 14.sp) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    if (!isFolder) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("文本类文件创建后可直接编辑；其他类型会创建空文件", fontSize = 11.sp, color = TextDim)
+                    }
+                    if (newName.isNotBlank() && File(current, newName.trim()).exists()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text("同名文件已存在，换个名字吧", fontSize = 11.sp, color = DangerRed)
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val f = FileOps.createFile(current, newName)
-                    showNewFile = false
-                    if (f != null) {
-                        toast = "已创建 ${f.name}"
-                        refresh++
-                        if (com.luogen.filehub.data.TypeDetect.catOf(f.name) == Cat.DOC) nav.push(Screen.TextView(f.absolutePath))
-                    } else toast = "创建失败"
-                }) { Text("创建") }
+                TextButton(
+                    enabled = newName.isNotBlank(),
+                    onClick = {
+                        val clean = newName.trim()
+                        val f = if (isFolder) FileOps.createFolder(current, clean) else FileOps.createFile(current, clean)
+                        if (f != null) {
+                            showNewFolder = false; showNewFile = false; newName = ""
+                            toast = "已创建 ${f.name}"
+                            refresh++
+                            if (!isFolder && com.luogen.filehub.data.TypeDetect.catOf(f.name) == Cat.DOC) nav.push(Screen.TextView(f.absolutePath))
+                        } else {
+                            toast = if (File(current, clean).exists()) "创建失败：同名文件已存在" else "创建失败：没有写入权限（请确认已授予「所有文件访问权限」）"
+                        }
+                    }
+                ) { Text("创建") }
             },
-            dismissButton = { TextButton(onClick = { showNewFile = false }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { showNewFolder = false; showNewFile = false; newName = "" }) { Text("取消") } }
         )
     }
 
@@ -324,29 +398,41 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     }
 
     if (showCopy) {
-        DestPickerDialog("复制到", current.absolutePath, { showCopy = false }, { dest ->
-            showCopy = false
-            val list = selItems
-            runOp("正在复制") { p ->
-                withContext(Dispatchers.IO) {
-                    val ok = FileOps.copy(list, File(dest)) { d, t, n -> p(if (t > 0) d.toFloat() / t else 0f, n) }
-                    "已复制 $ok 项"
+        DestPickerDialog(
+            title = "复制到",
+            startDir = current.absolutePath,
+            volumes = remember { try { repo.volumes() } catch (_: Throwable) { emptyList() } },
+            onDismiss = { showCopy = false },
+            onPick = { dest ->
+                showCopy = false
+                val list = selItems
+                runOp("正在复制") { p ->
+                    withContext(Dispatchers.IO) {
+                        val ok = FileOps.copy(list, File(dest)) { d, t, n -> p(if (t > 0) d.toFloat() / t else 0f, n) }
+                        "已复制 $ok 项"
+                    }
                 }
             }
-        })
+        )
     }
 
     if (showMove) {
-        DestPickerDialog("移动到", current.absolutePath, { showMove = false }, { dest ->
-            showMove = false
-            val list = selItems
-            runOp("正在移动") { p ->
-                withContext(Dispatchers.IO) {
-                    val ok = FileOps.move(list, File(dest)) { d, t, n -> p(if (t > 0) d.toFloat() / t else 0f, n) }
-                    "已移动 $ok 项"
+        DestPickerDialog(
+            title = "移动到",
+            startDir = current.absolutePath,
+            volumes = remember { try { repo.volumes() } catch (_: Throwable) { emptyList() } },
+            onDismiss = { showMove = false },
+            onPick = { dest ->
+                showMove = false
+                val list = selItems
+                runOp("正在移动") { p ->
+                    withContext(Dispatchers.IO) {
+                        val ok = FileOps.move(list, File(dest)) { d, t, n -> p(if (t > 0) d.toFloat() / t else 0f, n) }
+                        "已移动 $ok 项"
+                    }
                 }
             }
-        })
+        )
     }
 
     showInfo?.let { item ->

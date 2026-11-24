@@ -31,6 +31,7 @@ fun AppNav(ctx: Context, nav: NavStack) {
         is Screen.PdfView -> PdfViewerScreen(nav, s.path)
         is Screen.ArchiveView -> ArchiveViewerScreen(ctx, nav, s.path)
         is Screen.GlobalSearch -> GlobalSearchScreen(ctx, nav, repo, s.query)
+        is Screen.CleanCat -> CleanCatScreen(ctx, nav, repo, s.cat)
         is Screen.Vault -> VaultScreen(ctx, nav, repo)
         is Screen.VaultViewer -> ArchiveViewerScreen(ctx, nav, s.cachedPath)
     }

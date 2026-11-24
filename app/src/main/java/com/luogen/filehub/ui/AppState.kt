@@ -2,6 +2,9 @@ package com.luogen.filehub.ui
 
 import android.content.Context
 import com.luogen.filehub.data.FileRepo
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.StorageInfo
@@ -78,11 +81,16 @@ object AppState {
         storageAt = System.currentTimeMillis()
     }
 
+    // ---------- 清理页 ----------
+    var cleanDirty by mutableStateOf(false)
+    var cleanSizes: Map<Cat, Long>? = null
+
     // ---------- 保险箱 ----------
     var vaultKey: SecretKey? = null
 
     fun reset() {
         lists.clear(); listsAt.clear(); scroll.clear()
         counts = null; storage = null; vaultKey = null
+        cleanSizes = null; cleanDirty = false
     }
 }

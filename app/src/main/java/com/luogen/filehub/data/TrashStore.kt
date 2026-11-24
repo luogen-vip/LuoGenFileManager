@@ -80,12 +80,12 @@ object TrashStore {
         val list = list(ctx).toMutableList()
         val id = "t_" + System.currentTimeMillis() + "_" + (Math.random() * 1000).toInt() + (if (src.isDirectory) ".dir" else ".bin")
         val target = File(dir(ctx), id)
+        val size = if (src.isDirectory) 0L else src.length()
         val moved = try {
             if (src.renameTo(target)) true
             else copyRecursive(src, target).also { if (it) deleteRecursive(src) }
         } catch (_: Throwable) { false }
         if (!moved) return false
-        val size = if (src.isDirectory) 0L else src.length()
         list.add(
             Entry(
                 id = id, name = src.name, origPath = src.absolutePath,
@@ -113,22 +113,84 @@ object TrashStore {
         f.delete()
     }
 
-    fun restore(ctx: Context, entry: Entry): Boolean {
+    /** 还原到原位置；返回 null 表示成功，否则返回失败原因 */
+    fun restore(ctx: Context, entry: Entry): String? {
         val src = File(dir(ctx), entry.id)
         if (!src.exists()) {
             removeMeta(ctx, entry.id)
-            return false
+            return "回收站里的文件已经不在了"
         }
         val dest = File(entry.origPath)
         val parent = dest.parentFile
-        parent?.mkdirs()
-        val target = if (dest.exists()) uniqueFile(parent, entry.name) else dest
+        if (parent == null) return "原路径无效：${entry.origPath}"
+        try { parent.mkdirs() } catch (_: Throwable) {}
+        if (!parent.canWrite()) {
+            // 没有写入权限时仍尝试一次（有的机型 canWrite 判断不准）
+        }
+        val target = if (dest.exists()) uniqueFile(parent, dest.name) else dest
+        var err = ""
         val ok = try {
             if (src.renameTo(target)) true
-            else copyRecursive(src, target).also { if (it) deleteRecursive(src) }
-        } catch (_: Throwable) { false }
-        if (ok) removeMeta(ctx, entry.id)
-        return ok
+            else {
+                copyRecursive(src, target).also { done ->
+                    if (done) {
+                        deleteRecursive(src)
+                    } else {
+                        // 直写被系统拦下时，走 MediaStore 兜底（Android 10+ 公共目录）
+                        if (target.exists()) { try { target.delete() } catch (_: Throwable) {} }
+                        if (copyViaMediaStore(ctx, src, entry.origPath, entry.name)) {
+                            deleteRecursive(src)
+                            true
+                        } else false
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            err = t.message ?: t.javaClass.simpleName
+            false
+        }
+        if (ok) {
+            removeMeta(ctx, entry.id)
+            return null
+        }
+        return "还原失败" + if (err.isNotEmpty()) "：$err" else "（可能没有该位置写入权限）"
+    }
+
+    /** 通过 MediaStore 写入公共目录，绕开文件级写入限制 */
+    private fun copyViaMediaStore(ctx: Context, src: File, origPath: String, name: String): Boolean {
+        if (src.isDirectory) return false
+        return try {
+            val storageRoot = android.os.Environment.getExternalStorageDirectory().absolutePath
+            val relDir = File(origPath).parentFile?.absolutePath?.removePrefix(storageRoot)?.trimStart('/') ?: ""
+            val mime = TypeDetect.mimeOf(name).ifEmpty { "application/octet-stream" }
+            val collection = when {
+                relDir.startsWith("DCIM") -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                relDir.startsWith("Pictures") -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                relDir.startsWith("Movies") -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                relDir.startsWith("Music") -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+                relDir.startsWith("Download") && android.os.Build.VERSION.SDK_INT >= 29 -> MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                else -> return false
+            }
+            val values = android.content.ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                if (android.os.Build.VERSION.SDK_INT >= 29) {
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, relDir.ifEmpty { "Download" })
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            }
+            val uri = ctx.contentResolver.insert(collection, values) ?: return false
+            ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                src.inputStream().use { ins -> ins.copyTo(out) }
+            } ?: return false
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val done = android.content.ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                ctx.contentResolver.update(uri, done, null, null)
+            }
+            true
+        } catch (_: Throwable) {
+            false
+        }
     }
 
     fun uniqueFile(dir: File, name: String): File {

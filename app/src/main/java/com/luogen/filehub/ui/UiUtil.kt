@@ -10,7 +10,9 @@ import android.os.Build
 import android.util.LruCache
 import android.util.Size
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,10 +88,42 @@ fun itemIcon(item: FileItem): ImageVector {
         Cat.IMAGE -> Icons.Filled.Photo
         Cat.VIDEO -> Icons.Filled.Videocam
         Cat.AUDIO -> Icons.Filled.Audiotrack
-        Cat.DOC -> Icons.Filled.Article
-        Cat.ARCHIVE -> Icons.Filled.FolderZip
+        Cat.DOC -> docIcon(item.ext)
+        Cat.ARCHIVE -> if (item.ext == "iso") Icons.Filled.Album else Icons.Filled.FolderZip
         Cat.APP -> Icons.Filled.Apps
-        else -> Icons.Filled.Description
+        else -> Icons.Filled.InsertDriveFile
+    }
+}
+
+/** 文档按具体格式给小图标，一眼能看出 PDF / 表格 / 幻灯片 / 代码 / 文本 */
+fun docIcon(ext: String): ImageVector = when (ext.lowercase()) {
+    "pdf" -> Icons.Filled.PictureAsPdf
+    "doc", "docx", "odt", "rtf", "pages" -> Icons.Filled.Description
+    "xls", "xlsx", "csv", "tsv", "ods", "numbers" -> Icons.Filled.TableChart
+    "ppt", "pptx", "odp", "key" -> Icons.Filled.Slideshow
+    "txt", "md", "markdown", "log", "readme", "srt", "vtt", "lrc" -> Icons.Filled.TextSnippet
+    "html", "htm", "xml", "json", "yaml", "yml", "toml", "ini", "conf", "cfg" -> Icons.Filled.Code
+    "epub", "mobi", "azw3", "djvu" -> Icons.Filled.MenuBook
+    "java", "kt", "kts", "py", "js", "ts", "css", "sh", "bat", "c", "cpp", "h", "go", "rs", "php", "sql" -> Icons.Filled.Terminal
+    else -> Icons.Filled.Article
+}
+
+/** 文档按格式给不同颜色 */
+fun docColor(ext: String): Color = when (ext.lowercase()) {
+    "pdf" -> Color(0xFFDC2626)
+    "doc", "docx", "odt", "rtf", "pages" -> Color(0xFF2563EB)
+    "xls", "xlsx", "csv", "tsv", "ods", "numbers" -> Color(0xFF0E9F6E)
+    "ppt", "pptx", "odp", "key" -> Color(0xFFEA580C)
+    "txt", "md", "markdown", "log" -> Color(0xFF64748B)
+    "html", "htm", "xml", "json", "yaml", "yml", "toml", "ini", "conf", "cfg" -> Color(0xFF7C3AED)
+    "epub", "mobi", "azw3" -> Color(0xFFB45309)
+    else -> Color(0xFF334155)
+}
+
+fun itemColor(item: FileItem): Color {
+    return if (item.isDir) catColor(Cat.FILE) else when (itemCat(item)) {
+        Cat.DOC -> docColor(item.ext)
+        else -> catColor(itemCat(item))
     }
 }
 
@@ -243,6 +277,7 @@ fun ThumbBox(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileRow(
     item: FileItem,
@@ -255,7 +290,7 @@ fun FileRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

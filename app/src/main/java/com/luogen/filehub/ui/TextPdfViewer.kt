@@ -91,11 +91,14 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                             IconButton(onClick = {
                                 try {
                                     file.writeText(text)
+                                    // 回读校验，确保真的写进磁盘
+                                    val back = try { file.readText() } catch (_: Throwable) { "" }
+                                    if (back != text) throw IllegalStateException("写入后校验不一致（可能没有写入权限）")
                                     original = text
                                     editing = false
-                                    toast = "已保存"
+                                    toast = "已保存（${text.length} 字符）"
                                 } catch (t: Throwable) {
-                                    toast = "保存失败：${t.message}"
+                                    toast = "保存失败：${t.message ?: t.javaClass.simpleName}"
                                 }
                             }) { Icon(Icons.Filled.Save, null, tint = GoodGreen) }
                         } else {
