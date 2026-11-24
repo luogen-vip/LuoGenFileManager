@@ -10,19 +10,22 @@ object TypeDetect {
     val IMAGE_EXT = setOf(
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif",
         "tif", "tiff", "ico", "jfif", "dng", "raw", "cr2", "nef", "arw", "orf", "raf", "svg",
-        "psd", "xcf", "tga", "webp2", "hdr", "exr", "jxl", "jp2", "pbm", "pgm", "ppm", "xbm", "wbmp"
+        "psd", "psb", "xcf", "tga", "webp2", "hdr", "exr", "jxl", "jp2", "j2k", "pbm", "pgm", "ppm", "xbm", "wbmp",
+        "apng", "jpe", "cur", "ani", "icns", "heics", "avifs", "dds"
     )
 
     val VIDEO_EXT = setOf(
         "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "3gp", "ts",
         "rmvb", "rm", "mpg", "mpeg", "vob", "asf", "ogv", "m2ts", "f4v", "divx", "mts",
-        "mxf", "m2v", "m1v", "3g2", "3gpp", "qt", "yuv", "h264", "h265", "hevc", "vp9", "av1", "ts"
+        "mxf", "m2v", "m1v", "3g2", "3gpp", "qt", "yuv", "h264", "h265", "hevc", "vp9", "av1", "ts",
+        "m3u8", "mpd", "dv", "f4p", "ogm", "rmhd", "swf", "viv", "amv", "cavs"
     )
 
     val AUDIO_EXT = setOf(
         "mp3", "wav", "flac", "aac", "m4a", "ogg", "oga", "opus", "wma", "amr",
         "ape", "aiff", "aif", "mid", "midi", "mka", "ac3", "dts", "m4b", "caf", "ra",
-        "m4r", "amr-wb", "awb", "tta", "wv", "mpc", "spx", "gsm", "voc", "au", "snd", "3ga", "aob"
+        "m4r", "amr-wb", "awb", "tta", "wv", "mpc", "spx", "gsm", "voc", "au", "snd", "3ga", "aob",
+        "aifc", "mp4a", "dsf", "dff", "m3u", "pls", "xspf", "wpl", "cue", "kar", "smf", "mod", "xm", "it", "s3m"
     )
 
     val DOC_EXT = setOf(
@@ -33,21 +36,39 @@ object TypeDetect {
         "rs", "php", "sql", "properties", "gradle", "gitignore", "license",
         "tex", "latex", "xps", "oxps", "djvu", "chm", "pages", "numbers", "key", "wps", "et", "dps",
         "uof", "srt", "vtt", "lrc", "ass", "ssa", "sub", "nfo", "rst", "textile", "org", "adoc",
-        "env", "dockerfile", "makefile", "cmake", "mk", "babelrc", "editorconfig", "lock"
+        "env", "dockerfile", "makefile", "cmake", "mk", "babelrc", "editorconfig", "lock",
+        "kts", "dart", "swift", "m", "mm", "scala", "groovy", "lua", "pl", "pm", "r", "jl", "vb", "cs", "fs",
+        "asm", "s", "v", "sv", "vh", "vlog", "proto", "graphql", "gql", "vue", "svelte", "astro", "jsx", "tsx",
+        "json5", "jsonc", "hjson", "ndjson", "geojson", "csv", "tsv", "ps1", "psm1", "vbs", "vbe", "wsf", "reg",
+        "url", "webloc", "ics", "vcf", "eml", "msg", "mbox", "oft", "emlx", "nws",
+        "vsd", "vsdx", "pub", "one", "onetoc2", "mpp", "xmind", "drawio", "mmd", "plantuml", "puml",
+        "fb2", "lit", "pdb", "cbz", "cbr", "cb7", "kepub", "ibooks",
+        "psb", "kra", "clip", "sai", "ai", "indd", "sketch", "fig", "xd", "cdr", "eps", "afdesign", "afphoto", "afpub",
+        "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
+        "npmrc", "yarnrc", "gemfile", "podfile", "vagrantfile", "jenkinsfile", "htaccess", "htpasswd",
+        "repo", "service", "timer", "socket", "desktop", "plist", "strings", "storyboard", "xib", "resx", "rc",
+        "diff", "patch", "rej", "orig", "bak", "tmp", "part", "crdownload", "download"
     )
 
     val ARCHIVE_EXT = setOf(
         "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "zst",
         "iso", "cab", "jar", "war", "apks", "lz", "lzma", "arj", "cpio", "whl", "crx",
         "xz", "txz", "z", "lzh", "lha", "xar", "pkg", "deb", "rpm", "apkg", "xapk", "obb",
-        "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "zipx", "alz", "egg"
+        "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "zipx", "alz", "egg",
+        "tar.zst", "tzst", "tar.lz", "tar.lzma", "zstd", "lz4", "br", "rar5", "part1", "r00", "r01",
+        "001", "7z.001", "zip.001", "bzip2", "gzip", "compress", "zoo", "ace", "pea", "sit", "sitx", "hqx"
     )
 
     val TEXT_EXT = setOf(
         "txt", "md", "markdown", "json", "xml", "html", "htm", "log", "ini", "yaml",
         "yml", "toml", "conf", "cfg", "java", "kt", "kts", "py", "js", "ts", "css",
         "sh", "bat", "c", "cpp", "h", "go", "rs", "php", "sql", "properties",
-        "gradle", "csv", "tsv", "gitignore", "license", "readme", "srt", "vtt", "lrc"
+        "gradle", "csv", "tsv", "gitignore", "license", "readme", "srt", "vtt", "lrc",
+        "kts", "dart", "swift", "scala", "groovy", "lua", "pl", "r", "jl", "vb", "cs", "fs", "asm", "s",
+        "proto", "graphql", "gql", "vue", "svelte", "astro", "jsx", "tsx", "json5", "jsonc", "hjson", "ndjson",
+        "geojson", "ps1", "psm1", "vbs", "vbe", "wsf", "reg", "url", "webloc", "ics", "vcf", "eml", "mbox",
+        "diff", "patch", "desktop", "plist", "strings", "npmrc", "yarnrc", "gemfile", "podfile",
+        "vagrantfile", "jenkinsfile", "htaccess", "htpasswd", "repo", "service", "timer", "socket"
     )
 
     fun catOf(fileName: String, mime: String = "", isDir: Boolean = false): Cat {
@@ -191,9 +212,51 @@ object TypeDetect {
         }
     }
 
+    /** 常见但不是“图片/视频/文档”系统的文件，也给它一个看得懂的名字 */
+    private val EXT_LABEL = mapOf(
+        "exe" to "Windows 可执行程序", "com" to "DOS 可执行程序", "scr" to "Windows 屏保程序",
+        "msi" to "Windows 安装包", "msix" to "Windows 应用包", "msixbundle" to "Windows 应用包合集",
+        "appx" to "Windows 应用包", "appxbundle" to "Windows 应用包合集", "appinstaller" to "Windows 应用安装器",
+        "bat" to "Windows 批处理脚本", "cmd" to "Windows 命令脚本", "ps1" to "PowerShell 脚本",
+        "psm1" to "PowerShell 模块", "vbs" to "VBScript 脚本", "vbe" to "VBScript 编码脚本", "wsf" to "Windows 脚本",
+        "dll" to "动态链接库", "sys" to "系统驱动文件", "drv" to "设备驱动", "ocx" to "ActiveX 控件",
+        "cpl" to "控制面板项", "inf" to "驱动安装信息", "reg" to "注册表文件", "cab" to "Windows 压缩包",
+        "iso" to "光盘镜像 · ISO", "esd" to "Windows 系统镜像 · ESD", "wim" to "Windows 系统镜像 · WIM",
+        "img" to "磁盘/系统镜像 · IMG", "dmg" to "macOS 磁盘映像", "toast" to "macOS 光盘映像",
+        "deb" to "Debian/Ubuntu 安装包", "rpm" to "Linux RPM 安装包", "appimage" to "Linux AppImage 程序",
+        "flatpak" to "Linux Flatpak 包", "snap" to "Linux Snap 包", "ipa" to "iOS 应用包",
+        "apkg" to "Anki 卡包", "xapk" to "安卓 XAPK 安装包", "apks" to "安卓 APKS 安装包", "obb" to "安卓 OBB 数据包",
+        "vhd" to "虚拟硬盘", "vhdx" to "虚拟硬盘 · VHDX", "vmdk" to "VMware 虚拟磁盘",
+        "qcow2" to "QEMU 虚拟磁盘", "ova" to "虚拟机导出包", "ovf" to "虚拟机描述文件",
+        "nrg" to "光盘镜像 · NRG", "mdf" to "光盘镜像 · MDF", "mds" to "光盘镜像索引", "cue" to "光盘音轨索引",
+        "vcd" to "虚拟光盘", "bwi" to "BlindWrite 镜像", "ccd" to "CloneCD 镜像",
+        "torrent" to "BT 种子文件", "magnet" to "磁力链接文件",
+        "cer" to "证书文件", "crt" to "证书文件", "pem" to "证书/密钥", "p12" to "证书密钥库", "pfx" to "证书密钥库",
+        "der" to "证书文件", "key" to "密钥/Keynote", "csr" to "证书请求", "asc" to "签名文件", "sig" to "签名文件",
+        "ttf" to "字体文件", "otf" to "字体文件", "woff" to "网页字体", "woff2" to "网页字体", "ttc" to "字体合集",
+        "fon" to "点阵字体", "pfb" to "PostScript 字体",
+        "psd" to "Photoshop 源文件", "psb" to "Photoshop 大文件", "ai" to "Illustrator 源文件",
+        "indd" to "InDesign 排版文件", "sketch" to "Sketch 设计文件", "fig" to "Figma 设计文件",
+        "xd" to "Adobe XD 设计文件", "cdr" to "CorelDRAW 文件", "eps" to "EPS 矢量图",
+        "afdesign" to "Affinity Designer 文件", "afphoto" to "Affinity Photo 文件", "afpub" to "Affinity Publisher 文件",
+        "kra" to "Krita 绘画文件", "clip" to "Clip Studio 绘画文件", "sai" to "SAI 绘画文件",
+        "blend" to "Blender 工程", "stl" to "3D 打印模型", "obj" to "3D 模型", "fbx" to "3D 模型",
+        "3ds" to "3D 模型", "dae" to "3D 模型", "glb" to "glTF 3D 模型", "gltf" to "glTF 3D 模型",
+        "dwg" to "AutoCAD 图纸", "dxf" to "CAD 交换图纸", "step" to "STEP 三维模型", "stp" to "STEP 三维模型",
+        "iges" to "IGES 三维模型", "igs" to "IGES 三维模型", "skp" to "SketchUp 模型", "max" to "3ds Max 工程",
+        "c4d" to "Cinema 4D 工程", "ma" to "Maya 工程", "mb" to "Maya 工程",
+        "apk" to "APK 安装包", "aab" to "Android App Bundle",
+        "sqlite" to "SQLite 数据库", "sqlite3" to "SQLite 数据库", "db" to "数据库文件", "db3" to "数据库文件",
+        "mdb" to "Access 数据库", "accdb" to "Access 数据库", "dbf" to "dBASE 数据库",
+        "parquet" to "Parquet 数据文件", "avro" to "Avro 数据文件", "orc" to "ORC 数据文件",
+        "bak" to "备份文件", "tmp" to "临时文件", "part" to "未完成下载", "crdownload" to "Chrome 未完成下载",
+        "download" to "未完成下载", "lock" to "锁文件"
+    )
+
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
+        EXT_LABEL[e]?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"
@@ -225,7 +288,7 @@ object TypeDetect {
                 return "$c（按内容识别 · ${magic.uppercase()}）"
             }
         }
-        return if (e.isEmpty()) "无后缀 · 未知类型" else "未知类型（.$e）"
+        return if (e.isEmpty()) "无后缀 · 未知类型" else "文件 · ${e.uppercase()}"
     }
 
     private val ZIP_FAMILY = setOf(
@@ -310,6 +373,12 @@ object TypeDetect {
             "json" -> "application/json"
             "xml" -> "text/xml"
             "html", "htm" -> "text/html"
+            "exe" -> "application/vnd.microsoft.portable-executable"
+            "msi" -> "application/x-msi"
+            "dmg" -> "application/x-apple-diskimage"
+            "deb" -> "application/vnd.debian.binary-package"
+            "rpm" -> "application/x-rpm"
+            "iso" -> "application/x-iso9660-image"
             "apk" -> "application/vnd.android.package-archive"
             "zip" -> "application/zip"
             "rar" -> "application/x-rar-compressed"

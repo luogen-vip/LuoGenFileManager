@@ -55,6 +55,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     var loading by remember(path) { mutableStateOf(true) }
     var editable by remember(path) { mutableStateOf(true) }
     var binary by remember(path) { mutableStateOf(false) }
+    var truncated by remember(path) { mutableStateOf(false) }
     var askExit by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
     var openInfo by remember { mutableStateOf(false) }
@@ -63,15 +64,29 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     LaunchedEffect(path) {
         withContext(Dispatchers.IO) {
             val ok = try { TypeDetect.looksText(file) || file.length() == 0L } catch (_: Throwable) { false }
-            // 二进制/非 UTF-8 也照样显示出来（可能乱码），不能只丢一句“无法解析”
+            // 二进制/非 UTF-8 也照样显示出来（可能乱码），而且开放编辑，保存即用纯文本覆盖
+            val limit = 4L * 1024 * 1024
+            val cut = file.length() > limit
             val content = try {
-                if (ok) file.readText() else file.readBytes().toString(Charsets.UTF_8)
+                if (cut) {
+                    java.io.FileInputStream(file).use { ins ->
+                        val buf = ByteArray(limit.toInt())
+                        var n = 0
+                        while (n < buf.size) {
+                            val r = ins.read(buf, n, buf.size - n)
+                            if (r <= 0) break
+                            n += r
+                        }
+                        String(buf, 0, n, Charsets.UTF_8)
+                    }
+                } else if (ok) file.readText() else file.readBytes().toString(Charsets.UTF_8)
             } catch (_: Throwable) {
                 try { file.readBytes().toString(Charsets.ISO_8859_1) } catch (_: Throwable) { "" }
             }
             withContext(Dispatchers.Main) {
-                editable = ok
+                editable = true
                 binary = !ok
+                truncated = cut
                 text = content
                 original = content
                 loading = false
@@ -91,7 +106,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     Column {
                         Text(file.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Text(
-                            "${file.length().toSizeText()} · " + if (editing) "编辑中（未保存）" else if (editable) "可编辑文本" else "二进制/无法编辑",
+                            "${file.length().toSizeText()} · " + if (editing) "编辑中（未保存）" else if (binary) "乱码/二进制 · 可编辑" else "可编辑文本",
                             fontSize = 11.sp, color = TextDim
                         )
                     }
@@ -159,12 +174,23 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                         )
                     }
                 }
-                editing -> OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxSize().padding(8.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
-                )
+                editing -> Column(Modifier.fillMaxSize()) {
+                    if (binary || truncated) {
+                        Surface(color = WarnAmber.copy(alpha = 0.12f)) {
+                            Text(
+                                (if (truncated) "文件较大，只显示/编辑前 4 MB；" else "") +
+                                    "这是按文本显示的乱码/二进制内容，保存后会以纯文本覆盖原文件。",
+                                color = WarnAmber, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(10.dp)
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+                    )
+                }
                 text.isEmpty() -> Column(
                     Modifier.fillMaxSize().padding(24.dp),
                     verticalArrangement = Arrangement.Center,
@@ -175,13 +201,24 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     Text("这个文件是空的", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = TextMain)
                     Text("文件里没有任何内容（0 字节），不是没有加载出来。点右上角编辑可以直接写内容。", fontSize = 12.sp, color = TextDim)
                 }
-                else -> SelectionContainer {
+                else -> Column(Modifier.fillMaxSize()) {
+                    if (binary || truncated) {
+                        Surface(color = WarnAmber.copy(alpha = 0.12f)) {
+                            Text(
+                                (if (truncated) "文件较大，只显示前 4 MB；" else "") +
+                                    "乱码是二进制内容按文本显示的结果，点右上角编辑可以直接改写并保存覆盖。",
+                                color = WarnAmber, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(10.dp)
+                            )
+                        }
+                    }
+                    SelectionContainer {
                     Text(
                         text,
                         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
                         fontSize = 14.sp,
                         fontFamily = FontFamily.Monospace
                     )
+                }
                 }
             }
         }

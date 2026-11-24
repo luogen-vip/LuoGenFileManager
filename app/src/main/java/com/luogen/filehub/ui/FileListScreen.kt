@@ -473,7 +473,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                         item = it0,
                                         selected = selected.contains(it0.key),
                                         selectionMode = selected.isNotEmpty(),
-                                        onOpen = { openByCat(ctx, nav, it0, g.list, cat, appTab, toast = { toast = it }) },
+                                        onOpen = { openByCat(ctx, nav, it0, display, cat, appTab, toast = { toast = it }) },
                                         onToggle = { toggleSel(selected, it0.key) { selected = it } }
                                     )
                                 }

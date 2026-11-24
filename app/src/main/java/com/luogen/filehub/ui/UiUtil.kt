@@ -95,10 +95,29 @@ fun itemIcon(item: FileItem): ImageVector {
         Cat.VIDEO -> Icons.Filled.Videocam
         Cat.AUDIO -> Icons.Filled.Audiotrack
         Cat.DOC -> docIcon(item.ext)
-        Cat.ARCHIVE -> if (item.ext == "iso") Icons.Filled.Album else Icons.Filled.FolderZip
+        Cat.ARCHIVE -> if (item.ext in setOf("iso", "esd", "wim", "img", "dmg", "vhd", "vhdx", "vmdk")) Icons.Filled.Album else Icons.Filled.FolderZip
         Cat.APP -> Icons.Filled.Apps
-        else -> Icons.Filled.InsertDriveFile
+        else -> fileIcon(item.ext)
     }
+}
+
+/** “我的文件”里各种叫得上名的格式也给个直观图标，不再一律灰色方块 */
+private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
+    "exe", "com", "scr", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "wsf", "msi", "msix", "msixbundle",
+    "appx", "appxbundle", "appinstaller" -> Icons.Filled.Terminal
+    "dll", "sys", "drv", "ocx", "cpl" -> Icons.Filled.Memory
+    "reg", "inf" -> Icons.Filled.Settings
+    "iso", "esd", "wim", "img", "dmg", "toast", "vhd", "vhdx", "vmdk", "qcow2", "ova", "ovf",
+    "nrg", "mdf", "mds", "cue", "vcd", "bwi", "ccd" -> Icons.Filled.Album
+    "deb", "rpm", "appimage", "flatpak", "snap", "ipa", "apkg" -> Icons.Filled.Apps
+    "ttf", "otf", "woff", "woff2", "ttc", "fon", "pfb" -> Icons.Filled.TextFields
+    "psd", "psb", "ai", "indd", "sketch", "fig", "xd", "cdr", "eps", "kra", "clip", "sai",
+    "afdesign", "afphoto", "afpub", "blend", "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf",
+    "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb" -> Icons.Filled.Brush
+    "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
+    "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc" -> Icons.Filled.Storage
+    "apk", "xapk", "apks", "aab" -> Icons.Filled.Apps
+    else -> Icons.Filled.InsertDriveFile
 }
 
 /** 文档按具体格式给小图标，一眼能看出 PDF / 表格 / 幻灯片 / 代码 / 文本 */
