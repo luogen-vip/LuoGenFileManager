@@ -1,0 +1,77 @@
+package com.luogen.filehub.model
+
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+fun Long.toSizeText(): String {
+    if (this <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    var v = this.toDouble()
+    var i = 0
+    while (v >= 1024 && i < units.size - 1) {
+        v /= 1024.0
+        i++
+    }
+    return if (i == 0) "${this} B" else String.format(Locale.US, "%.2f %s", v, units[i])
+}
+
+private val hm = SimpleDateFormat("HH:mm", Locale.getDefault())
+private val full = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+private val md = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+private val dmy = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+private val ymd = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+fun Long.toFullTime(): String = full.format(Date(this))
+
+/** 人性化时间：刚刚 / x分钟前 / 今天 HH:mm / 昨天 HH:mm / MM-dd HH:mm / 年-月-日 */
+fun Long.toRelativeTime(): String {
+    if (this <= 0) return "未知时间"
+    val now = System.currentTimeMillis()
+    val diff = now - this
+    if (diff in 0..59_999) return "刚刚"
+    if (diff in 60_000..3_599_999) return "${diff / 60_000}分钟前"
+    val cal = Calendar.getInstance()
+    val nowCal = Calendar.getInstance()
+    cal.timeInMillis = this
+    val sameDay = cal.get(Calendar.YEAR) == nowCal.get(Calendar.YEAR) &&
+        cal.get(Calendar.DAY_OF_YEAR) == nowCal.get(Calendar.DAY_OF_YEAR)
+    if (sameDay) return "今天 ${hm.format(Date(this))}"
+    val yCal = Calendar.getInstance()
+    yCal.add(Calendar.DAY_OF_YEAR, -1)
+    val isYesterday = cal.get(Calendar.YEAR) == yCal.get(Calendar.YEAR) &&
+        cal.get(Calendar.DAY_OF_YEAR) == yCal.get(Calendar.DAY_OF_YEAR)
+    if (isYesterday) return "昨天 ${hm.format(Date(this))}"
+    if (nowCal.get(Calendar.YEAR) == cal.get(Calendar.YEAR)) return md.format(Date(this))
+    return dmy.format(Date(this))
+}
+
+/** 分组标题：今天 / 昨天 / 2026-11-20 */
+fun Long.toDayTitle(): String {
+    val cal = Calendar.getInstance().apply { timeInMillis = this@toDayTitle }
+    val now = Calendar.getInstance()
+    if (cal.get(Calendar.YEAR) == now.get(Calendar.YEAR) &&
+        cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR)
+    ) return "今天"
+    val y = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+    if (cal.get(Calendar.YEAR) == y.get(Calendar.YEAR) &&
+        cal.get(Calendar.DAY_OF_YEAR) == y.get(Calendar.DAY_OF_YEAR)
+    ) return "昨天"
+    return ymd.format(Date(this))
+}
+
+fun nameNoExt(name: String): String {
+    val dot = name.lastIndexOf('.')
+    return if (dot > 0) name.substring(0, dot) else name
+}
+
+fun extOf(name: String): String {
+    val dot = name.lastIndexOf('.')
+    return if (dot > 0 && dot < name.length - 1) name.substring(dot + 1).lowercase() else ""
+}
+
+fun parentPathOf(path: String): String {
+    val f = java.io.File(path)
+    return f.parent ?: path
+}
