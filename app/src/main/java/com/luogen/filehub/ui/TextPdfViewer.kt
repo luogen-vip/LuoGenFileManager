@@ -251,14 +251,13 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
                     Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    DocAction("分享", Icons.Filled.Share) {
-                        FileOps.share(ctx, listOf(FileItem(path = path, name = file.name, size = file.length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(file.name))))
-                    }
+                    val pfi = FileItem(path = path, name = file.name, size = file.length(), mime = TypeDetect.mimeOf(file.name))
+                    DocAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(pfi)) }
                     DocAction("详情", Icons.Filled.Info) {
                         toast = "${file.name}\n${file.length().toSizeText()} · ${pageCount} 页\n${path}"
                     }
                     DocAction("删除", Icons.Filled.DeleteOutline) {
-                        if (FileOps.deleteToTrash(ctx, listOf(FileItem(path = path, name = file.name, size = file.length(), mime = com.luogen.filehub.data.TypeDetect.mimeOf(file.name))) > 0) nav.pop()
+                        if (FileOps.deleteToTrash(ctx, listOf(pfi)) > 0) nav.pop()
                     }
                 }
             }
