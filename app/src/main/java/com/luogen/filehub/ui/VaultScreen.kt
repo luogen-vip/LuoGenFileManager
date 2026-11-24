@@ -662,7 +662,12 @@ private fun VaultContent(ctx: Context, nav: NavStack, repo: FileRepo, key: Secre
     }
 
     if (showExport) {
-        DestPickerDialog("解密导出到", root, { showExport = false }, { dest ->
+        DestPickerDialog(
+            title = "解密导出到",
+            startDir = root,
+            volumes = emptyList(),
+            onDismiss = { showExport = false },
+            onPick = { dest ->
             showExport = false
             val list = selEntries
             scope.launch {

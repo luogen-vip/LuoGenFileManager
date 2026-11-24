@@ -2,6 +2,7 @@ package com.luogen.filehub.data
 
 import android.content.Context
 import com.luogen.filehub.model.FileItem
+import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

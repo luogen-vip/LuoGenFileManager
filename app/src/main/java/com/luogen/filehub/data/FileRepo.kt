@@ -268,10 +268,18 @@ class FileRepo(private val ctx: Context) {
                 if (dir == null || !dir.exists() || state != Environment.MEDIA_MOUNTED) return@forEach
                 var total = 0L; var free = 0L
                 try {
-                    ssm?.let {
-                        total = it.getTotalBytes(v.uuid)
-                        free = it.getFreeBytes(v.uuid)
-                    }
+                    try {
+                        val uuid = StorageManager.UUID_DEFAULT.let { def -> if (v.isPrimary) def else null }
+                        if (ssm != null && uuid != null) {
+                            total = ssm.getTotalBytes(uuid)
+                            free = ssm.getFreeBytes(uuid)
+                        } else if (ssm != null && !v.isPrimary) {
+                            // 可移动存储：用反射拿 UUID，拿不到就退回 StatFs
+                            val u = v.uuid?.let { java.util.UUID.fromString(it) } ?: java.util.UUID.nameUUIDFromBytes(v.uuid?.toByteArray() ?: ByteArray(0))
+                            total = ssm.getTotalBytes(u)
+                            free = ssm.getFreeBytes(u)
+                        }
+                    } catch (_: Throwable) {}
                 } catch (_: Throwable) {}
                 if (total <= 0) {
                     try {
