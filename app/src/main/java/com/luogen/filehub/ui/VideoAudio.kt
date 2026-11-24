@@ -376,8 +376,8 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { hub.setShuffle(!hub.shuffle) }) {
-                Icon(Icons.Filled.Shuffle, null, tint = if (hub.shuffle) BrandBlue else TextDim)
+            IconButton(onClick = { hub.setShuffle(!hub.shuffleOn) }) {
+                Icon(Icons.Filled.Shuffle, null, tint = if (hub.shuffleOn) BrandBlue else TextDim)
             }
             IconButton(onClick = { hub.prev() }) {
                 Icon(Icons.Filled.SkipPrevious, null, tint = TextDim)
@@ -398,7 +398,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            when (hub.repeatMode) { 1 -> "单曲循环"; 2 -> "列表循环"; else -> "顺序播放" } + if (hub.shuffle) " · 随机" else "",
+            when (hub.repeatMode) { 1 -> "单曲循环"; 2 -> "列表循环"; else -> "顺序播放" } + if (hub.shuffleOn) " · 随机" else "",
             color = TextDim, fontSize = 11.sp, modifier = Modifier.fillMaxWidth(),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )

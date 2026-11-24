@@ -39,8 +39,10 @@ object AudioHub {
         private set
     var duration by mutableStateOf(0L)
         private set
-    var shuffle = false
-    var repeatMode = 0
+    var shuffleOn by mutableStateOf(false)
+        private set
+    var repeatMode by mutableStateOf(0)
+        private set
     private var startedService = false
 
     fun currentPath(): String? = playlist.getOrNull(index)
@@ -90,7 +92,7 @@ object AudioHub {
         index = idx
         p.clearMediaItems()
         list.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
-        p.shuffleModeEnabled = shuffle
+        p.shuffleModeEnabled = shuffleOn
         p.seekTo(idx, 0)
         p.prepare()
         p.playWhenReady = true
@@ -127,7 +129,7 @@ object AudioHub {
     }
 
     fun setShuffle(on: Boolean) {
-        shuffle = on
+        shuffleOn = on
         player?.shuffleModeEnabled = on
     }
 
