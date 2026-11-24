@@ -76,7 +76,10 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     LaunchedEffect(current.absolutePath) {
         volumes = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
     }
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf("browse:" + dirPath))
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = AppState.scrollOf("browse:" + dirPath),
+        initialFirstVisibleItemScrollOffset = AppState.scrollOffsetOf("browse:" + dirPath)
+    )
     var firstSortEffect by remember { mutableStateOf(true) }
     LaunchedEffect(sortMode, asc, query) {
         if (firstSortEffect) {
@@ -107,9 +110,10 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         // 恢复这个文件夹上次的滚动位置
         try {
             val saved = AppState.scrollOf("browse:" + current.absolutePath)
+            val off = AppState.scrollOffsetOf("browse:" + current.absolutePath)
             if (saved > 0 && loaded.isNotEmpty()) {
                 kotlinx.coroutines.yield()
-                listState.scrollToItem(saved.coerceIn(0, (loaded.size - 1).coerceAtLeast(0)))
+                listState.scrollToItem(saved.coerceIn(0, (loaded.size - 1).coerceAtLeast(0)), off)
             }
         } catch (_: Throwable) {}
     }
@@ -130,9 +134,9 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     }
 
     LaunchedEffect(current.absolutePath) {
-        snapshotFlow { listState.firstVisibleItemIndex }.collect {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }.collect {
             // 加载中/空列表时 index 会瞬间变成 0，不能拿它覆盖已保存的位置
-            if (!loading && items.isNotEmpty()) AppState.keepScroll("browse:" + current.absolutePath, it)
+            if (!loading && items.isNotEmpty()) AppState.keepScroll("browse:" + current.absolutePath, it.first, it.second)
         }
     }
 

@@ -52,8 +52,9 @@ data class FtpClientRecord(
     val id: String,
     val ip: String,
     val connectedAt: Long,
-    val lastSeen: Long,
-    var online: Boolean
+    var lastSeen: Long,
+    var online: Boolean,
+    var sessions: Int = 0
 )
 
 /**
@@ -151,14 +152,16 @@ object FtpManager {
         refreshNotification()
     }
 
+    // 同一台设备（同一 IP）只保留一条记录：新连接把离线翻成在线，断开才变离线
     private fun updateClient(ip: String, id: String, online: Boolean) {
         val now = System.currentTimeMillis()
-        val old = records.firstOrNull { it.id == id }
+        val old = records.firstOrNull { it.ip == ip }
         if (old == null) {
-            records.add(FtpClientRecord(id, ip, now, now, online))
+            if (online) records.add(FtpClientRecord(ip, ip, now, now, true, 1))
         } else {
-            records.remove(old)
-            records.add(old.copy(lastSeen = now, online = online))
+            if (online) old.sessions += 1 else old.sessions = (old.sessions - 1).coerceAtLeast(0)
+            old.lastSeen = now
+            old.online = old.sessions > 0
         }
         main.post { clients = records.sortedByDescending { it.lastSeen } }
         refreshNotification()
@@ -268,7 +271,7 @@ class FtpServer(
 
     private fun handle(socket: Socket) {
         val ip = socket.inetAddress?.hostAddress ?: "未知"
-        val id = ip + "#" + System.currentTimeMillis()
+        val id = ip
         onClient(ip, id, true)
         try {
             socket.soTimeout = 0
@@ -290,7 +293,6 @@ class FtpServer(
             while (alive) {
                 val line = reader.readLine() ?: break
                 if (line.isBlank()) continue
-                onClient(ip, id, true)
                 val sp = line.indexOf(' ')
                 val cmd = (if (sp < 0) line else line.substring(0, sp)).uppercase(Locale.US)
                 val arg = if (sp < 0) "" else line.substring(sp + 1)

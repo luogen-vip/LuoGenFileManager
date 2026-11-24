@@ -20,11 +20,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
@@ -46,6 +51,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     var editing by remember(path) { mutableStateOf(false) }
     var loading by remember(path) { mutableStateOf(true) }
     var editable by remember(path) { mutableStateOf(true) }
+    var binary by remember(path) { mutableStateOf(false) }
     var askExit by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
     var openInfo by remember { mutableStateOf(false) }
@@ -54,9 +60,15 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     LaunchedEffect(path) {
         withContext(Dispatchers.IO) {
             val ok = try { TypeDetect.looksText(file) || file.length() == 0L } catch (_: Throwable) { false }
-            val content = try { file.readText() } catch (_: Throwable) { "" }
+            // 二进制/非 UTF-8 也照样显示出来（可能乱码），不能只丢一句“无法解析”
+            val content = try {
+                if (ok) file.readText() else file.readBytes().toString(Charsets.UTF_8)
+            } catch (_: Throwable) {
+                try { file.readBytes().toString(Charsets.ISO_8859_1) } catch (_: Throwable) { "" }
+            }
             withContext(Dispatchers.Main) {
                 editable = ok
+                binary = !ok
                 text = content
                 original = content
                 loading = false
@@ -128,10 +140,21 @@ fun TextViewerScreen(nav: NavStack, path: String) {
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = BrandBlue) }
-                !editable -> Column(Modifier.fillMaxSize().padding(20.dp)) {
-                    Text("这个文件不是纯文本（或编码无法解析），无法在应用内编辑。", color = TextDim, fontSize = 13.sp)
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = { FileOps.openWith(ctx, path) }) { Text("用其他应用打开") }
+                !editable -> Column(Modifier.fillMaxSize()) {
+                    Surface(color = WarnAmber.copy(alpha = 0.12f)) {
+                        Text(
+                            "这个文件可能是二进制或特殊编码，下面是按文本方式直接显示的内容，出现乱码是正常的；不能在这里编辑。",
+                            color = WarnAmber, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        )
+                    }
+                    SelectionContainer {
+                        Text(
+                            text.ifEmpty { "（读不出可显示的内容）" },
+                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
                 editing -> OutlinedTextField(
                     value = text,
@@ -159,6 +182,30 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                 }
             }
         }
+    }
+
+    if (openInfo) {
+        val rows = listOf(
+            "文件名" to file.name,
+            "大小" to file.length().toSizeText(),
+            "类型" to TypeDetect.labelOf(file.name, TypeDetect.mimeOf(file.name), file),
+            "修改时间" to try { file.lastModified().toString() } catch (_: Throwable) { "" },
+            "路径" to path
+        )
+        AlertDialog(
+            onDismissRequest = { openInfo = false },
+            title = { Text("文件详情") },
+            text = {
+                Column {
+                    rows.forEach { (k, v) ->
+                        Text(k, fontSize = 11.sp, color = TextDim)
+                        Text(v, fontSize = 13.sp, color = TextMain)
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { openInfo = false }) { Text("关闭") } }
+        )
     }
 
     if (askExit) {
@@ -300,13 +347,43 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
 @Composable
 private fun PdfPages(renderer: PdfRenderer, pageCount: Int, lock: Any) {
     val widthPx = with(LocalDensity.current) { 1000.dp.roundToPx() }
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+    // 双指缩放 + 放大后拖动；缩小时仍然是正常上下翻页
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    val ts = rememberTransformableState { zoomChange, panChange, _ ->
+        val ns = (scale * zoomChange).coerceIn(1f, 4f)
+        val mx = (size.width * (ns - 1f) / 2f).coerceAtLeast(0f)
+        val my = (size.height * (ns - 1f) / 2f).coerceAtLeast(0f)
+        offset = if (ns <= 1.01f) {
+            Offset.Zero
+        } else {
+            Offset(
+                (offset.x + panChange.x).coerceIn(-mx, mx),
+                (offset.y + panChange.y).coerceIn(-my, my)
+            )
+        }
+        scale = ns
+    }
+    Box(
+        Modifier.fillMaxSize().clipToBounds().onSizeChanged { size = it }
     ) {
-        items(count = pageCount) { idx ->
-            PdfPage(renderer, idx, widthPx, lock)
+        LazyColumn(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = offset.x
+                    translationY = offset.y
+                }
+                .transformable(ts, canPan = { scale > 1.01f }),
+            contentPadding = PaddingValues(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(count = pageCount) { idx ->
+                PdfPage(renderer, idx, widthPx, lock)
+            }
         }
     }
 }

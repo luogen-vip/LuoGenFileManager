@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -22,10 +23,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.focus.FocusRequester
@@ -34,6 +38,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
@@ -45,6 +50,7 @@ import com.luogen.filehub.model.toFullTime
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -57,6 +63,7 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         Box(Modifier.fillMaxSize().background(Color.Black))
         return
     }
+    val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(
         initialPage = start.coerceIn(0, paths.size - 1),
         pageCount = { paths.size }
@@ -65,13 +72,34 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var infoFor by remember { mutableStateOf<String?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var renameFor by remember { mutableStateOf<String?>(null) }
+    var zoomed by remember { mutableStateOf(false) }
 
     val cur = paths[pagerState.currentPage]
     fun itemOf(p: String) = FileItem(path = p, name = File(p).name, size = File(p).length(), mime = TypeDetect.mimeOf(p))
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            ImagePage(path = paths[page], onTap = { chrome = !chrome })
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = !zoomed
+        ) { page ->
+            ImagePage(
+                path = paths[page],
+                onTap = { chrome = !chrome },
+                onZoomChange = { zoomed = it },
+                onEdgeNext = {
+                    if (pagerState.currentPage < paths.size - 1) {
+                        zoomed = false
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                    }
+                },
+                onEdgePrev = {
+                    if (pagerState.currentPage > 0) {
+                        zoomed = false
+                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) }
+                    }
+                }
+            )
         }
 
         if (chrome) {
@@ -180,7 +208,13 @@ internal fun ViewerAction(label: String, icon: ImageVector, onClick: () -> Unit)
 }
 
 @Composable
-private fun ImagePage(path: String, onTap: () -> Unit) {
+private fun ImagePage(
+    path: String,
+    onTap: () -> Unit,
+    onZoomChange: (Boolean) -> Unit,
+    onEdgeNext: () -> Unit,
+    onEdgePrev: () -> Unit
+) {
     val ctx = LocalContext.current
     val config = LocalConfiguration.current
     val req = maxOf(config.screenWidthDp, 1080)
@@ -188,8 +222,44 @@ private fun ImagePage(path: String, onTap: () -> Unit) {
     LaunchedEffect(path) {
         if (bmp == null) bmp = Thumbs.load(ctx, path, false, req = req)
     }
-    Box(
-        Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) },
+    // 双指缩放：手指离开后保持当前比例；放大后可自由拖动，拖到左右边缘再拖才翻页
+    var scale by remember(path) { mutableStateOf(1f) }
+    var offset by remember(path) { mutableStateOf(Offset.Zero) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    var paged by remember { mutableStateOf(false) }
+    LaunchedEffect(scale) { onZoomChange(scale > 1.01f) }
+    BoxWithConstraints(
+        Modifier
+            .fillMaxSize()
+            .onSizeChanged { size = it }
+            .pointerInput(path) {
+                detectTapGestures(onTap = { onTap() })
+            }
+            .pointerInput(path, size) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val ns = (scale * zoom).coerceIn(1f, 5f)
+                    val mx = (size.width * (ns - 1f) / 2f).coerceAtLeast(0f)
+                    val my = (size.height * (ns - 1f) / 2f).coerceAtLeast(0f)
+                    val nx = (offset.x + pan.x).coerceIn(-mx, mx)
+                    val ny = (offset.y + pan.y).coerceIn(-my, my)
+                    if (ns <= 1.01f) {
+                        scale = 1f
+                        offset = Offset.Zero
+                        paged = false
+                    } else {
+                        scale = ns
+                        // 已经顶到边缘又继续往里拖，才翻到上一张/下一张
+                        if (mx > 0f && nx >= mx - 1f && pan.x > 24f && !paged) {
+                            paged = true
+                            onEdgePrev()
+                        } else if (mx > 0f && nx <= -mx + 1f && pan.x < -24f && !paged) {
+                            paged = true
+                            onEdgeNext()
+                        }
+                        offset = Offset(nx, ny)
+                    }
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         val b = bmp
@@ -197,7 +267,14 @@ private fun ImagePage(path: String, onTap: () -> Unit) {
             Image(
                 bitmap = b,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    },
                 contentScale = ContentScale.Fit
             )
         } else {
@@ -209,12 +286,18 @@ private fun ImagePage(path: String, onTap: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.data.FileRepo, initial: String) {
-    var query by remember { mutableStateOf(initial) }
-    var results by remember { mutableStateOf<List<FileItem>>(emptyList()) }
+    // 恢复上次的搜索词与结果：点进文件再返回不会白屏重搜
+    val startQuery = if (initial.isNotBlank()) initial else AppState.searchQuery
+    var query by remember { mutableStateOf(startQuery) }
+    var results by remember {
+        mutableStateOf(if (AppState.searchResultsFor == startQuery) AppState.searchResults else emptyList())
+    }
     var loading by remember { mutableStateOf(false) }
-    var searched by remember { mutableStateOf(false) }
-    var filt by remember { mutableStateOf<Cat?>(null) }
-    var excluded by remember { mutableStateOf<Set<Cat>>(emptySet()) }
+    var searched by remember {
+        mutableStateOf(startQuery.isNotBlank() && AppState.searchResultsFor == startQuery)
+    }
+    var filt by remember { mutableStateOf(AppState.searchFilt) }
+    var excluded by remember { mutableStateOf(AppState.searchExcluded) }
     var showExclude by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -227,9 +310,18 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     // 边打边搜：MediaStore 的 LIKE 查询，不再全盘索引
     LaunchedEffect(query) {
         val q = query.trim()
+        AppState.searchQuery = q
         if (q.isEmpty()) {
             results = emptyList()
             searched = false
+            loading = false
+            AppState.searchResults = emptyList()
+            AppState.searchResultsFor = ""
+            return@LaunchedEffect
+        }
+        if (AppState.searchResultsFor == q && AppState.searchResults.isNotEmpty()) {
+            results = AppState.searchResults
+            searched = true
             loading = false
             return@LaunchedEffect
         }
@@ -246,6 +338,12 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
         results = r
         searched = true
         loading = false
+        AppState.searchResults = r
+        AppState.searchResultsFor = q
+    }
+    LaunchedEffect(filt, excluded) {
+        AppState.searchFilt = filt
+        AppState.searchExcluded = excluded
     }
 
     val shown = remember(results, filt, excluded) {
@@ -333,7 +431,17 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
             when {
                 query.isBlank() -> EmptyView("输入文件名或关键词开始搜索")
                 shown.isEmpty() && searched -> EmptyView("没有匹配的文件")
-                else -> LazyColumn(Modifier.fillMaxSize()) {
+                else -> {
+                    val searchList = rememberLazyListState(
+                        initialFirstVisibleItemIndex = AppState.scrollOf("gsearch"),
+                        initialFirstVisibleItemScrollOffset = AppState.scrollOffsetOf("gsearch")
+                    )
+                    LaunchedEffect(searchList) {
+                        snapshotFlow { searchList.firstVisibleItemIndex to searchList.firstVisibleItemScrollOffset }.collect {
+                            AppState.keepScroll("gsearch", it.first, it.second)
+                        }
+                    }
+                    LazyColumn(Modifier.fillMaxSize(), state = searchList) {
                     items(count = shown.size, key = { shown[it].key }) { idx ->
                         val item = shown[idx]
                         FileRow(
@@ -344,6 +452,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                             onLongClick = {},
                             trailing = { Text(itemCat(item).title, color = TextDim, fontSize = 11.sp) }
                         )
+                    }
                     }
                 }
             }

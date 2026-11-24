@@ -73,58 +73,84 @@ fun AppRoot() {
         granted = hasAllFilesAccess(ctx) || result.values.any { it }
     }
 
-    if (!granted) {
-        PermissionScreen(
-            onRequest = {
-                if (Build.VERSION.SDK_INT >= 30) {
-                    try {
-                        ctx.startActivity(
-                            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + ctx.packageName))
-                        )
-                    } catch (_: Throwable) {
-                        ctx.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-                    }
-                } else {
-                    permLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.READ_EXTERNAL_STORAGE,
-                            Manifest.permission.WRITE_EXTERNAL_STORAGE
-                        )
-                    )
+    var showPerm by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(500)
+        if (!hasAllFilesAccess(ctx)) showPerm = true
+    }
+    // 从系统设置回来时自动检测
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1200)
+            val now = hasAllFilesAccess(ctx)
+            if (now && !granted) granted = true
+            if (now) showPerm = false
+        }
+    }
+
+    LaunchedEffect(AppState.ftpOpenRequested) {
+        if (AppState.ftpOpenRequested) {
+            AppState.ftpOpenRequested = false
+            try { nav.push(Screen.Ftp) } catch (_: Throwable) {}
+        }
+    }
+    LaunchedEffect(AppState.audioOpenRequested) {
+        if (AppState.audioOpenRequested) {
+            AppState.audioOpenRequested = false
+            try {
+                if (com.luogen.filehub.data.AudioHub.playlist.isNotEmpty()) {
+                    nav.push(Screen.AudioView(com.luogen.filehub.data.AudioHub.playlist, com.luogen.filehub.data.AudioHub.index))
                 }
+            } catch (_: Throwable) {}
+        }
+    }
+    // 通知栏播放控制需要通知权限（Android 13+）
+    if (Build.VERSION.SDK_INT >= 33) {
+        val nm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        LaunchedEffect(Unit) {
+            try {
+                val ok = androidx.core.content.ContextCompat.checkSelfPermission(
+                    ctx, android.Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!ok) nm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            } catch (_: Throwable) {}
+        }
+    }
+    AppNav(ctx, nav)
+
+    if (showPerm) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("需要所有文件访问权限") },
+            text = {
+                Text("授权后才能真正扫描、预览、复制、移动、压缩和解压手机里的全部文件。首页已经可以先看，随时点下面去授权。", fontSize = 14.sp)
             },
-            onRecheck = { granted = hasAllFilesAccess(ctx) }
-        )
-    } else {
-        LaunchedEffect(AppState.ftpOpenRequested) {
-            if (AppState.ftpOpenRequested) {
-                AppState.ftpOpenRequested = false
-                try { nav.push(Screen.Ftp) } catch (_: Throwable) {}
-            }
-        }
-        LaunchedEffect(AppState.audioOpenRequested) {
-            if (AppState.audioOpenRequested) {
-                AppState.audioOpenRequested = false
-                try {
-                    if (com.luogen.filehub.data.AudioHub.playlist.isNotEmpty()) {
-                        nav.push(Screen.AudioView(com.luogen.filehub.data.AudioHub.playlist, com.luogen.filehub.data.AudioHub.index))
+            confirmButton = {
+                TextButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        try {
+                            ctx.startActivity(
+                                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + ctx.packageName))
+                            )
+                        } catch (_: Throwable) {
+                            ctx.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                        }
+                    } else {
+                        permLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE))
                     }
-                } catch (_: Throwable) {}
+                }) { Text("去授权") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    granted = hasAllFilesAccess(ctx)
+                    if (granted) {
+                        showPerm = false
+                    } else {
+                        android.widget.Toast.makeText(ctx, "还没有授权，部分文件可能看不到", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("我已授权，重新检测") }
             }
-        }
-        // 通知栏播放控制需要通知权限（Android 13+）
-        if (Build.VERSION.SDK_INT >= 33) {
-            val nm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-            LaunchedEffect(Unit) {
-                try {
-                    val ok = androidx.core.content.ContextCompat.checkSelfPermission(
-                        ctx, android.Manifest.permission.POST_NOTIFICATIONS
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    if (!ok) nm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                } catch (_: Throwable) {}
-            }
-        }
-        AppNav(ctx, nav)
+        )
     }
 }
 

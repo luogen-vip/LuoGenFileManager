@@ -293,15 +293,15 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         }
     }
 
-    val transition = rememberInfiniteTransition(label = "swirl")
-    val angleAnim by transition.animateFloat(
-        initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 12000, easing = LinearEasing)
-        ),
-        label = "angle"
-    )
-    val angle = if (swirl && playing) angleAnim else 0f
+    // 自己累计角度：暂停停在原处，继续播放接着转，拖动进度条不会回零
+    var rotation by remember { mutableStateOf(0f) }
+    LaunchedEffect(swirl, playing) {
+        while (swirl && playing) {
+            kotlinx.coroutines.delay(50)
+            rotation = (rotation + 1.5f) % 360f
+        }
+    }
+    val angle = rotation
 
     Column(
         Modifier

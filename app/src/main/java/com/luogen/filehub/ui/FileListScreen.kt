@@ -183,13 +183,23 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     }
 
     val listKey = "$cacheKey:list"
-    val listState: LazyListState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
-    val gridState: LazyGridState = rememberLazyGridState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
+    val listState: LazyListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = AppState.scrollOf(listKey),
+        initialFirstVisibleItemScrollOffset = AppState.scrollOffsetOf(listKey)
+    )
+    val gridState: LazyGridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = AppState.scrollOf(listKey),
+        initialFirstVisibleItemScrollOffset = AppState.scrollOffsetOf(listKey)
+    )
     LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }.collect {
+            AppState.keepScroll(listKey, it.first, it.second)
+        }
     }
     LaunchedEffect(gridState) {
-        snapshotFlow { gridState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }.collect {
+            AppState.keepScroll(listKey, it.first, it.second)
+        }
     }
     // 实时性：媒体库变化（改名/下载/删除）与安装/卸载应用都触发静默刷新
     DisposableEffect(cacheKey) {
@@ -247,10 +257,11 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         if (!restoredScroll && items.isNotEmpty()) {
             restoredScroll = true
             val saved = AppState.scrollOf(listKey)
+            val off = AppState.scrollOffsetOf(listKey)
             if (saved > 0) {
                 val max = (items.size - 1).coerceAtLeast(0)
-                try { listState.scrollToItem(saved.coerceAtMost(max)) } catch (_: Throwable) {}
-                try { gridState.scrollToItem(saved.coerceAtMost(max)) } catch (_: Throwable) {}
+                try { listState.scrollToItem(saved.coerceAtMost(max), off) } catch (_: Throwable) {}
+                try { gridState.scrollToItem(saved.coerceAtMost(max), off) } catch (_: Throwable) {}
             }
         }
     }

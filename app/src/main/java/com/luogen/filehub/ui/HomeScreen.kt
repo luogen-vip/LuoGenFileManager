@@ -45,7 +45,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         mutableStateOf(AppState.counts ?: Prefs.countsCache().ifEmpty { null })
     }
     var storage by remember { mutableStateOf(AppState.storage ?: StorageInfo()) }
-    var extra by remember { mutableStateOf(0 to 0) }
+    var extra by remember { mutableStateOf(Triple(0, 0, 0)) }
     var refreshing by remember { mutableStateOf(AppState.counts == null) }
     var volumes by remember { mutableStateOf<List<VolumeInfo>>(AppState.volumes ?: emptyList()) }
     var volTick by remember { mutableStateOf(0) }
@@ -66,6 +66,17 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
         try { ctx.registerReceiver(receiver, filter) } catch (_: Throwable) {}
         onDispose { try { ctx.unregisterReceiver(receiver) } catch (_: Throwable) {} }
+    }
+
+    // 回收站/收藏/保险箱数量：首页常驻时每 1.2 秒校正一次，任何操作后回来都是最新值
+    LaunchedEffect(Unit) {
+        while (true) {
+            val t = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
+            val v = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
+            val f = Prefs.favorites().size
+            extra = Triple(t, v, f)
+            kotlinx.coroutines.delay(1200)
+        }
     }
 
     LaunchedEffect(volTick) {
@@ -90,7 +101,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                 AppState.storeCounts(c)
                 Prefs.setCountsCache(c)
             }
-            extra = trash to vault
+            extra = Triple(trash, vault, Prefs.favorites().size)
             AppState.countsDirty = false
             refreshing = false
             return@LaunchedEffect
@@ -111,12 +122,12 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                 AppState.storeCounts(c)
                 Prefs.setCountsCache(c)
             }
-            extra = trash to vault
+            extra = Triple(trash, vault, Prefs.favorites().size)
             refreshing = false
         } else {
             val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
             val vault = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
-            extra = trash to vault
+            extra = Triple(trash, vault, Prefs.favorites().size)
         }
     }
 
@@ -229,6 +240,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             cat to when (cat) {
                 Cat.TRASH -> extra.first
                 Cat.VAULT -> extra.second
+                Cat.FAV -> extra.third
                 Cat.CLEAN -> -1
                 else -> counts?.get(cat) ?: -1
             }
@@ -254,7 +266,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text("v1.4.0 · 罗根", color = TextDim, fontSize = 11.sp)
+        Text("v1.4.1 · 罗根", color = TextDim, fontSize = 11.sp)
         Spacer(Modifier.height(20.dp))
     }
 }

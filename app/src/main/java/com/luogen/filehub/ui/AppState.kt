@@ -31,10 +31,20 @@ object AppState {
 
     // ---------- 滚动位置 ----------
     private val scroll = HashMap<String, Int>()
+    private val scrollOffsets = HashMap<String, Int>()
     fun scrollOf(key: String): Int = scroll[key] ?: 0
-    fun keepScroll(key: String, value: Int) {
+    fun scrollOffsetOf(key: String): Int = scrollOffsets[key] ?: 0
+    fun keepScroll(key: String, value: Int, offset: Int = 0) {
         scroll[key] = value
+        scrollOffsets[key] = offset
     }
+
+    // ---------- 全局搜索状态（点进文件再返回不丢）----------
+    var searchQuery by mutableStateOf("")
+    var searchResults by mutableStateOf<List<FileItem>>(emptyList())
+    var searchResultsFor by mutableStateOf("")
+    var searchFilt by mutableStateOf<Cat?>(null)
+    var searchExcluded by mutableStateOf<Set<Cat>>(emptySet())
 
     // ---------- 列表数据缓存 ----------
     private val lists = HashMap<String, List<FileItem>>()
