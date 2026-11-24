@@ -67,8 +67,11 @@ fun nameNoExt(name: String): String {
 }
 
 fun extOf(name: String): String {
-    val dot = name.lastIndexOf('.')
-    return if (dot > 0 && dot < name.length - 1) name.substring(dot + 1).lowercase() else ""
+    // 真正的扩展名永远是“最后一个点”后面那一段；即使删到只剩 ".apk" 也算 apk，
+    // 不能把前面文件名里的点当成扩展名分隔符
+    val n = name.trim()
+    val dot = n.lastIndexOf('.')
+    return if (dot >= 0 && dot < n.length - 1) n.substring(dot + 1).lowercase() else ""
 }
 
 fun parentPathOf(path: String): String {

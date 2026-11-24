@@ -116,7 +116,19 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb" -> Icons.Filled.Brush
     "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
     "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc" -> Icons.Filled.Storage
-    "apk", "xapk", "apks", "aab" -> Icons.Filled.Apps
+    "apk", "xapk", "apks", "aab", "ap", "ipa", "pkg", "mpkg", "flatpakref", "flatpakrepo", "run", "appimage" -> Icons.Filled.Apps
+    "lnk", "url", "webloc" -> Icons.Filled.Link
+    "msu", "msp", "msc", "msi", "msix", "appx", "diagcab", "job", "scf", "ps1", "psm1", "bat", "cmd", "exe", "com", "scr", "vbs", "vbe", "wsf" -> Icons.Filled.Terminal
+    "so", "ko", "o", "a", "la", "lib", "exp", "ilk", "dll", "sys", "drv", "ocx", "cpl", "dex" -> Icons.Filled.Memory
+    "vdi", "vbox", "vmx", "vag", "vhd", "vhdx", "vmdk", "qcow2", "ova", "ovf" -> Icons.Filled.Album
+    "gba", "gb", "gbc", "nds", "3ds", "nes", "sfc", "smc", "z64", "n64", "cso", "chd", "pbp" -> Icons.Filled.Album
+    "mobileprovision", "provisioningprofile", "mobileconfig", "ipsw", "car" -> Icons.Filled.Security
+    "azw", "azw3", "azw4", "prc", "tcr", "fb2", "lit", "epub", "mobi", "cbz", "cbr", "cb7", "kepub" -> Icons.Filled.MenuBook
+    "ttf", "otf", "woff", "woff2", "ttc", "fon", "pfb" -> Icons.Filled.TextFields
+    "psd", "psb", "ai", "indd", "sketch", "fig", "xd", "cdr", "eps", "kra", "clip", "sai", "afdesign", "afphoto", "afpub" -> Icons.Filled.Brush
+    "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf", "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb", "blend" -> Icons.Filled.Brush
+    "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
+    "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc" -> Icons.Filled.Storage
     else -> Icons.Filled.InsertDriveFile
 }
 

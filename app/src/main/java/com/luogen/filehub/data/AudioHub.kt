@@ -20,6 +20,8 @@ import android.os.IBinder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -85,6 +87,16 @@ object AudioHub {
         appCtx = ctx.applicationContext
         player?.let { return it }
         val p = ExoPlayer.Builder(ctx.applicationContext).build()
+        // 正确处理音频焦点：别的应用抢声音时暂停，回来点播放能重新拿到焦点继续
+        try {
+            p.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .build(),
+                true
+            )
+        } catch (_: Throwable) {}
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
@@ -118,7 +130,12 @@ object AudioHub {
                 override fun onSkipToNext() { next() }
                 override fun onSkipToPrevious() { prev() }
                 override fun onSeekTo(pos: Long) { seekTo(pos) }
-                override fun onStop() { stopAndClear() }
+                override fun onStop() {
+                    // 系统/其他应用抢走媒体控制时只暂停，绝不清空队列，回来还能接着播
+                    player?.pause()
+                    pushState()
+                    refreshNotification()
+                }
             })
             s.isActive = true
             session = s
@@ -153,8 +170,22 @@ object AudioHub {
     }
 
     fun toggle() {
-        val p = player ?: return
-        if (p.isPlaying) p.pause() else p.play()
+        val p = ensure(appCtx ?: return)
+        if (p.isPlaying) {
+            p.pause()
+        } else {
+            // 队列被系统清掉/播放器进过 ENDED 时，按当前列表原地重建再播，不能点了没反应
+            if (p.mediaItemCount == 0 && playlist.isNotEmpty()) {
+                playlist.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
+                p.seekTo(index.coerceIn(0, playlist.size - 1), 0)
+                p.prepare()
+            } else if (p.playbackState == Player.STATE_ENDED) {
+                p.seekTo(p.currentMediaItemIndex.coerceAtLeast(0), 0)
+                p.prepare()
+            }
+            p.play()
+            startForegroundService()
+        }
         pushState()
         refreshNotification()
     }
@@ -208,8 +239,8 @@ object AudioHub {
 
     fun stopAndClear() {
         player?.pause()
+        // 保留播放列表与当前曲目：下次点播放还能原地续播，不会变成点了没反应
         player?.clearMediaItems()
-        playlist = emptyList()
         playing = false
         appCtx?.let { NotificationManagerCompatSafe.cancel(it) }
         appCtx?.let { c ->
@@ -254,7 +285,7 @@ object AudioHub {
 
     private fun startForegroundService() {
         val c = appCtx ?: return
-        if (startedService) return
+        // 不靠 startedService 一次性判断：服务被系统回收后，再次播放也要能重新拉起来
         startedService = true
         try {
             val i = Intent(c, AudioFgService::class.java)

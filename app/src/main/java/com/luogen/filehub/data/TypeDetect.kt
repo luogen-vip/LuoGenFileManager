@@ -68,7 +68,10 @@ object TypeDetect {
         "proto", "graphql", "gql", "vue", "svelte", "astro", "jsx", "tsx", "json5", "jsonc", "hjson", "ndjson",
         "geojson", "ps1", "psm1", "vbs", "vbe", "wsf", "reg", "url", "webloc", "ics", "vcf", "eml", "mbox",
         "diff", "patch", "desktop", "plist", "strings", "npmrc", "yarnrc", "gemfile", "podfile",
-        "vagrantfile", "jenkinsfile", "htaccess", "htpasswd", "repo", "service", "timer", "socket"
+        "vagrantfile", "jenkinsfile", "htaccess", "htpasswd", "repo", "service", "timer", "socket",
+        "sol", "move", "cairo", "nim", "zig", "ex", "exs", "erl", "hrl", "clj", "cljs", "hs", "lhs",
+        "ml", "mli", "fsx", "pas", "pp", "dpr", "bas", "cob", "ada", "adb", "ads", "forth", "f", "for",
+        "tcl", "awk", "sed", "smali", "smi"
     )
 
     fun catOf(fileName: String, mime: String = "", isDir: Boolean = false): Cat {
@@ -250,7 +253,40 @@ object TypeDetect {
         "mdb" to "Access 数据库", "accdb" to "Access 数据库", "dbf" to "dBASE 数据库",
         "parquet" to "Parquet 数据文件", "avro" to "Avro 数据文件", "orc" to "ORC 数据文件",
         "bak" to "备份文件", "tmp" to "临时文件", "part" to "未完成下载", "crdownload" to "Chrome 未完成下载",
-        "download" to "未完成下载", "lock" to "锁文件"
+        "download" to "未完成下载", "lock" to "锁文件",
+        "lnk" to "Windows 快捷方式", "url" to "网页快捷方式", "webloc" to "网页快捷方式",
+        "msu" to "Windows 更新包", "msp" to "Windows 补丁包", "msc" to "Windows 管理控制台",
+        "mui" to "Windows 多语言资源", "mun" to "Windows 资源文件", "msstyles" to "Windows 主题样式",
+        "theme" to "Windows 主题", "themepack" to "Windows 主题包", "deskthemepack" to "Windows 桌面主题包",
+        "diagcab" to "Windows 诊断包", "job" to "计划任务", "scf" to "Windows 资源管理器命令",
+        "so" to "Linux 动态库", "ko" to "Linux 内核模块", "o" to "编译目标文件", "a" to "静态库",
+        "la" to "Libtool 库", "lib" to "静态库", "exp" to "导出库", "ilk" to "编译中间文件",
+        "dex" to "Dalvik 可执行文件", "smali" to "Smali 代码", "aab" to "Android App Bundle",
+        "mobileprovision" to "iOS 描述文件", "provisioningprofile" to "iOS 描述文件",
+        "mobileconfig" to "Apple 配置描述文件", "ipsw" to "iOS 固件", "car" to "iOS 资源包",
+        "pkg" to "macOS 安装包", "mpkg" to "macOS 安装包", "flatpakref" to "Flatpak 引用",
+        "flatpakrepo" to "Flatpak 仓库", "run" to "Linux 可执行安装包", "app" to "macOS 应用程序",
+        "appimage" to "Linux AppImage 程序", "vdi" to "VirtualBox 虚拟硬盘", "vbox" to "VirtualBox 配置",
+        "vmx" to "VMware 虚拟机配置", "vag" to "VirtualBox 配置",
+        "gba" to "GBA 游戏 ROM", "gb" to "Game Boy ROM", "gbc" to "GBC 游戏 ROM", "nds" to "NDS 游戏 ROM",
+        "3ds" to "3DS 游戏 ROM", "nes" to "FC 游戏 ROM", "sfc" to "SFC 游戏 ROM", "smc" to "SMC 游戏 ROM",
+        "z64" to "N64 游戏 ROM", "n64" to "N64 游戏 ROM", "cso" to "PSP 压缩镜像", "chd" to "MAME 硬盘镜像",
+        "pbp" to "PSP 游戏包", "azw" to "Kindle 电子书", "azw4" to "Kindle 电子书", "prc" to "电子书",
+        "tcr" to "电子书", "sup" to "蓝光字幕", "idx" to "字幕索引", "smi" to "SAMI 字幕",
+        "m4p" to "iTunes 音频", "aa" to "Audible 有声书", "aax" to "Audible 有声书",
+        "ifo" to "DVD 信息文件", "bup" to "DVD 备份文件",
+        "odg" to "OpenDocument 图形", "ott" to "OpenDocument 模板", "ots" to "OpenDocument 表格模板",
+        "otp" to "OpenDocument 演示模板", "fodt" to "Flat ODF 文本", "fods" to "Flat ODF 表格",
+        "fodp" to "Flat ODF 演示", "sxw" to "OpenOffice 文本", "sxc" to "OpenOffice 表格",
+        "sxi" to "OpenOffice 演示", "wpd" to "WordPerfect 文档",
+        "sol" to "Solidity 合约", "move" to "Move 合约", "cairo" to "Cairo 代码", "nim" to "Nim 代码",
+        "zig" to "Zig 代码", "ex" to "Elixir 代码", "exs" to "Elixir 脚本", "erl" to "Erlang 代码",
+        "hrl" to "Erlang 头文件", "clj" to "Clojure 代码", "cljs" to "ClojureScript 代码",
+        "hs" to "Haskell 代码", "lhs" to "Literate Haskell", "ml" to "OCaml 代码", "mli" to "OCaml 接口",
+        "fsx" to "F# 脚本", "pas" to "Pascal 代码", "pp" to "Pascal 代码", "dpr" to "Delphi 工程",
+        "bas" to "Basic 代码", "cob" to "COBOL 代码", "ada" to "Ada 代码", "adb" to "Ada 代码",
+        "ads" to "Ada 规范", "forth" to "Forth 代码", "f" to "Fortran 代码", "for" to "Fortran 代码",
+        "pro" to "Pro 工程/脚本", "tcl" to "Tcl 脚本", "awk" to "AWK 脚本", "sed" to "sed 脚本"
     )
 
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */

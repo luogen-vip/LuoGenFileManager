@@ -35,7 +35,10 @@ fun RenameDialog(
         mutableStateOf(TextFieldValue(initial, selection = TextRange(0, base.length)))
     }
     var muteWarn by remember { mutableStateOf(Prefs.extWarnMuted()) }
-    val extChanged = extOf(value.text) != extOf(initial)
+    // 只比较“最后一个点”后面的真实扩展名；只改主体、删掉前面文件名里的点，不算改扩展名
+    val oldExt = extOf(initial)
+    val newExt = extOf(value.text.trim())
+    val extChanged = newExt != oldExt
 
     AlertDialog(
         onDismissRequest = onDismiss,
