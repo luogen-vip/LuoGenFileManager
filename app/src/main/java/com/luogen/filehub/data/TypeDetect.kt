@@ -9,17 +9,20 @@ object TypeDetect {
 
     val IMAGE_EXT = setOf(
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif",
-        "tif", "tiff", "ico", "jfif", "dng", "raw", "cr2", "nef", "arw", "orf", "raf", "svg"
+        "tif", "tiff", "ico", "jfif", "dng", "raw", "cr2", "nef", "arw", "orf", "raf", "svg",
+        "psd", "xcf", "tga", "webp2", "hdr", "exr", "jxl", "jp2", "pbm", "pgm", "ppm", "xbm", "wbmp"
     )
 
     val VIDEO_EXT = setOf(
         "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "3gp", "ts",
-        "rmvb", "rm", "mpg", "mpeg", "vob", "asf", "ogv", "m2ts", "f4v", "divx", "mts"
+        "rmvb", "rm", "mpg", "mpeg", "vob", "asf", "ogv", "m2ts", "f4v", "divx", "mts",
+        "mxf", "m2v", "m1v", "3g2", "3gpp", "qt", "yuv", "h264", "h265", "hevc", "vp9", "av1", "ts"
     )
 
     val AUDIO_EXT = setOf(
         "mp3", "wav", "flac", "aac", "m4a", "ogg", "oga", "opus", "wma", "amr",
-        "ape", "aiff", "aif", "mid", "midi", "mka", "ac3", "dts", "m4b", "caf", "ra"
+        "ape", "aiff", "aif", "mid", "midi", "mka", "ac3", "dts", "m4b", "caf", "ra",
+        "m4r", "amr-wb", "awb", "tta", "wv", "mpc", "spx", "gsm", "voc", "au", "snd", "3ga", "aob"
     )
 
     val DOC_EXT = setOf(
@@ -27,12 +30,17 @@ object TypeDetect {
         "csv", "tsv", "rtf", "odt", "ods", "odp", "epub", "mobi", "azw3", "json",
         "xml", "html", "htm", "log", "ini", "yaml", "yml", "toml", "conf", "cfg",
         "java", "kt", "py", "js", "ts", "css", "sh", "bat", "c", "cpp", "h", "go",
-        "rs", "php", "sql", "properties", "gradle", "gitignore", "license"
+        "rs", "php", "sql", "properties", "gradle", "gitignore", "license",
+        "tex", "latex", "xps", "oxps", "djvu", "chm", "pages", "numbers", "key", "wps", "et", "dps",
+        "uof", "srt", "vtt", "lrc", "ass", "ssa", "sub", "nfo", "rst", "textile", "org", "adoc",
+        "env", "dockerfile", "makefile", "cmake", "mk", "babelrc", "editorconfig", "lock"
     )
 
     val ARCHIVE_EXT = setOf(
         "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz", "zst",
-        "iso", "cab", "jar", "war", "apks", "lz", "lzma", "arj", "cpio", "whl", "crx"
+        "iso", "cab", "jar", "war", "apks", "lz", "lzma", "arj", "cpio", "whl", "crx",
+        "xz", "txz", "z", "lzh", "lha", "xar", "pkg", "deb", "rpm", "apkg", "xapk", "obb",
+        "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "zipx", "alz", "egg"
     )
 
     val TEXT_EXT = setOf(
@@ -46,11 +54,12 @@ object TypeDetect {
         if (isDir) return Cat.FILE
         val e = extOf(fileName)
         return when {
+            // apk / xapk 本质是 zip，但类型必须显示成应用，不能被当成压缩包
+            e == "apk" || e == "xapk" || e == "apks" || mime == "application/vnd.android.package-archive" -> Cat.APP
             e in IMAGE_EXT || mime.startsWith("image/") -> Cat.IMAGE
             e in VIDEO_EXT || mime.startsWith("video/") -> Cat.VIDEO
             e in AUDIO_EXT || mime.startsWith("audio/") -> Cat.AUDIO
             e in ARCHIVE_EXT || mime.contains("zip") || mime.contains("compressed") || mime.contains("x-7z") -> Cat.ARCHIVE
-            e == "apk" || mime == "application/vnd.android.package-archive" -> Cat.APP
             e in DOC_EXT || mime.startsWith("text/") || mime.contains("pdf") ||
                 mime.contains("word") || mime.contains("sheet") || mime.contains("presentation") ||
                 mime.contains("officedocument") -> Cat.DOC
@@ -171,6 +180,84 @@ object TypeDetect {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
+    fun labelOf(name: String, mime: String = ""): String {
+        val e = extOf(name)
+        val known = when {
+            e == "apk" || e == "xapk" -> "APK 安装包"
+            e == "apks" -> "APKS 安装包"
+            e in IMAGE_EXT -> "图片 · ${e.uppercase()}"
+            e in VIDEO_EXT -> "视频 · ${e.uppercase()}"
+            e in AUDIO_EXT -> "音频 · ${e.uppercase()}"
+            e in ARCHIVE_EXT || e.contains("tar.") -> "压缩包 · ${e.uppercase()}"
+            e == "pdf" -> "PDF 文档"
+            e == "doc" || e == "docx" -> "Word 文档"
+            e == "xls" || e == "xlsx" || e == "csv" -> "表格 · ${e.uppercase()}"
+            e == "ppt" || e == "pptx" -> "幻灯片 · ${e.uppercase()}"
+            e in TEXT_EXT -> "文本 · ${e.uppercase()}"
+            e.isEmpty() && mime.startsWith("text/") -> "文本文件"
+            else -> ""
+        }
+        if (known.isNotEmpty()) return known
+        return if (e.isEmpty()) "未知类型" else "未知类型（.$e）"
+    }
+
+    private val ZIP_FAMILY = setOf(
+        "zip", "apk", "xapk", "apks", "jar", "war", "docx", "xlsx", "pptx", "epub",
+        "odt", "ods", "odp", "whl", "crx", "zipx", "egg"
+    )
+
+    /** 读文件头判断真实类型，和扩展名对不上就返回提示，对的返回 null */
+    fun mismatchHint(f: File): String? {
+        if (!f.isFile || f.length() < 12) return null
+        val head = ByteArray(16)
+        try {
+            java.io.FileInputStream(f).use { ins ->
+                val n = ins.read(head)
+                if (n < 4) return null
+            }
+        } catch (_: Throwable) { return null }
+        val e = extOf(f.name)
+        fun sig(vararg b: Int): Boolean {
+            for (i in b.indices) if (head[i].toInt() and 0xFF != b[i]) return false
+            return true
+        }
+        val real = when {
+            sig(0x50, 0x4B, 0x03, 0x04) || sig(0x50, 0x4B, 0x05, 0x06) -> "zip"
+            sig(0x25, 0x50, 0x44, 0x46) -> "pdf"
+            sig(0xFF, 0xD8, 0xFF) -> "jpg"
+            sig(0x89, 0x50, 0x4E, 0x47) -> "png"
+            sig(0x47, 0x49, 0x46, 0x38) -> "gif"
+            sig(0x52, 0x61, 0x72, 0x21, 0x1A, 0x07) -> "rar"
+            sig(0x37, 0x7A, 0xBC, 0xAF) -> "7z"
+            sig(0x66, 0x4C, 0x61, 0x43) -> "flac"
+            sig(0x4F, 0x67, 0x67, 0x53) -> "ogg"
+            sig(0x1F, 0x8B) -> "gz"
+            sig(0xFD, 0x37, 0x7A, 0x58, 0x5A) -> "xz"
+            else -> null
+        } ?: return null
+        val same = when (real) {
+            "zip" -> e in ZIP_FAMILY || e == "cbz" || e == "kepub"
+            "pdf" -> e == "pdf"
+            "jpg" -> e in setOf("jpg", "jpeg", "jfif", "jpe")
+            "png" -> e == "png"
+            "gif" -> e == "gif"
+            "rar" -> e == "rar" || e == "cbr"
+            "7z" -> e == "7z"
+            "flac" -> e == "flac"
+            "ogg" -> e in setOf("ogg", "oga", "opus", "spx")
+            "gz" -> e in setOf("gz", "tgz")
+            "xz" -> e in setOf("xz", "txz")
+            else -> true
+        }
+        if (same) return null
+        val pretty = when (real) {
+            "zip" -> if (e == "apk") "APK" else "ZIP/压缩包或 Office 文档"
+            else -> real.uppercase()
+        }
+        return "注意：这个文件内容其实是 $pretty（扩展名 .$e 与实际内容不符，可能是被改过后缀）"
     }
 
     fun mimeOf(name: String): String {

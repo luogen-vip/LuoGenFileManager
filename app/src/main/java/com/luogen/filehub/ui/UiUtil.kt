@@ -329,7 +329,7 @@ fun FileRow(
             Text(
                 buildString {
                     append(item.size.toSizeText())
-                    if (!item.isDir && item.ext.isNotEmpty()) append(" · ").append(item.ext.uppercase())
+                    if (!item.isDir && item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime))
                     append(" · ").append(item.modified.toRelativeTime())
                 },
                 color = TextDim,

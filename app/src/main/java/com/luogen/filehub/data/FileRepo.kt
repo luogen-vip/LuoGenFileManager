@@ -101,6 +101,33 @@ class FileRepo(private val ctx: Context) {
         )
     }
 
+    /**
+     * 兜底扫描：MediaStore 还没索引到新文件时（比如刚下载/刚改名），
+     * 直接按名字在常用目录里找一遍，保证第一次搜索就能搜到。
+     */
+    fun scanFallback(q: String, limit: Int = 200): List<FileItem> {
+        val key = q.trim()
+        if (key.isEmpty()) return emptyList()
+        val root = android.os.Environment.getExternalStorageDirectory()
+        val bases = listOf(
+            File(root, "Download"), File(root, "Documents"), File(root, "DCIM"),
+            File(root, "Pictures"), File(root, "Movies"), File(root, "Music"),
+            File(root, "Android/media"), File(root, "Telegram"), File(root, "tencent")
+        )
+        val out = ArrayList<FileItem>()
+        fun walk(dir: File, depth: Int) {
+            if (out.size >= limit) return
+            val list = try { dir.listFiles() } catch (_: Throwable) { null } ?: return
+            for (f in list) {
+                if (out.size >= limit) return
+                if (f.name.contains(key, true)) out.add(FileItem(path = f.absolutePath, name = f.name, size = f.length(), modified = f.lastModified(), isDir = f.isDirectory))
+                if (f.isDirectory && depth < 4 && !f.name.startsWith(".")) walk(f, depth + 1)
+            }
+        }
+        bases.forEach { if (it.exists()) walk(it, 1) }
+        return out.distinctBy { it.path }.take(limit)
+    }
+
     /** 最近文件（按修改时间倒序） */
     fun recent(limit: Int = 200): List<FileItem> = query(
         MediaStore.Files.getContentUri("external"),

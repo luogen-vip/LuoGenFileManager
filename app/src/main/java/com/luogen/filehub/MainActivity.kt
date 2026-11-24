@@ -87,6 +87,18 @@ fun AppRoot() {
             onRecheck = { granted = hasAllFilesAccess(ctx) }
         )
     } else {
+        // 通知栏播放控制需要通知权限（Android 13+）
+        if (Build.VERSION.SDK_INT >= 33) {
+            val nm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+            LaunchedEffect(Unit) {
+                try {
+                    val ok = androidx.core.content.ContextCompat.checkSelfPermission(
+                        ctx, android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!ok) nm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                } catch (_: Throwable) {}
+            }
+        }
         AppNav(ctx, nav)
     }
 }
@@ -183,8 +195,13 @@ fun openItem(ctx: Context, nav: NavStack, item: com.luogen.filehub.model.FileIte
             when {
                 ext == "pdf" -> nav.push(Screen.PdfView(item.path))
                 ext in com.luogen.filehub.data.TypeDetect.TEXT_EXT -> nav.push(Screen.TextView(item.path))
-                ext == "apk" -> com.luogen.filehub.data.FileOps.installApk(ctx, item.path)
-                else -> com.luogen.filehub.data.FileOps.openWith(ctx, item.path, item.mime)
+                ext == "apk" || ext == "xapk" -> com.luogen.filehub.data.FileOps.installApk(ctx, item.path)
+                // 未知后缀（比如自己改的 tx2）：先嗅探内容，是文本就用内置查看器，不再甩给系统
+                else -> if (com.luogen.filehub.data.TypeDetect.looksText(file)) {
+                    nav.push(Screen.TextView(item.path))
+                } else {
+                    com.luogen.filehub.data.FileOps.openWith(ctx, item.path, item.mime)
+                }
             }
         }
     }

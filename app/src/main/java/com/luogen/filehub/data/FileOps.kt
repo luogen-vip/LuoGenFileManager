@@ -287,14 +287,16 @@ object FileOps {
         } catch (_: Throwable) {}
     }
 
-    fun launchApp(ctx: Context, packageName: String): Boolean {
+    /** 返回 null 表示成功，否则是给用户看的具体失败原因 */
+    fun launchApp(ctx: Context, packageName: String): String? {
         return try {
-            val intent = ctx.packageManager.getLaunchIntentForPackage(packageName) ?: return false
+            val intent = ctx.packageManager.getLaunchIntentForPackage(packageName)
+                ?: return "这个应用没有可打开的界面：它属于系统底层服务（如音频/蓝牙/网络等后台服务），不是普通应用，无法直接启动"
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(intent)
-            true
-        } catch (_: Throwable) {
-            false
+            null
+        } catch (t: Throwable) {
+            "打开失败：${t.message ?: "系统拒绝启动该应用"}"
         }
     }
 }

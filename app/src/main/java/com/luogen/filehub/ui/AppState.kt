@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.StorageInfo
+import com.luogen.filehub.model.VolumeInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.crypto.SecretKey
@@ -80,6 +81,16 @@ object AppState {
         storage = s
         storageAt = System.currentTimeMillis()
     }
+
+    // ---------- 存储卷（U盘/SD卡，避免每次回首页闪一下） ----------
+    var volumes: List<VolumeInfo>? = null
+    var volumesAt: Long = 0L
+    fun storeVolumes(v: List<VolumeInfo>) {
+        volumes = v
+        volumesAt = System.currentTimeMillis()
+    }
+
+    var countsDirty by mutableStateOf(false)
 
     // ---------- 清理页 ----------
     var cleanDirty by mutableStateOf(false)

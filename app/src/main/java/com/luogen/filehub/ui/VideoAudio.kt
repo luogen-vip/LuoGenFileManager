@@ -42,6 +42,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.luogen.filehub.data.AudioHub
 import com.luogen.filehub.data.FileOps
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.data.TypeDetect
@@ -71,6 +72,8 @@ fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var renameFor by remember { mutableStateOf<String?>(null) }
 
     val player = remember { ExoPlayer.Builder(ctx).build() }
+
+    LaunchedEffect(Unit) { AudioHub.pauseForVideo() }
 
     DisposableEffect(Unit) {
         val listener = object : Player.Listener {
@@ -227,28 +230,37 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     if (paths.isEmpty()) return
-    var index by remember { mutableStateOf(start.coerceIn(0, paths.size - 1)) }
-    var playing by remember { mutableStateOf(false) }
-    var position by remember { mutableStateOf(0L) }
-    var duration by remember { mutableStateOf(0L) }
-    var shuffle by remember { mutableStateOf(false) }
-    var repeatMode by remember { mutableStateOf(0) }
+
     var cover by remember { mutableStateOf<ImageBitmap?>(null) }
-    var swirl by remember { mutableStateOf(Prefs.swirl(paths[start.coerceIn(0, paths.size - 1)]) ) }
+    var swirl by remember { mutableStateOf(Prefs.swirl(paths[start.coerceIn(0, paths.size - 1)])) }
     var toast by remember { mutableStateOf<String?>(null) }
     var seekDrag by remember { mutableStateOf<Float?>(null) }
-    var endedTick by remember { mutableStateOf(0) }
+    var pendingSeek by remember { mutableStateOf<Long?>(null) }
+    var tick by remember { mutableStateOf(0L) }
 
-    val player = remember { ExoPlayer.Builder(ctx).build() }
-
-    fun load(i: Int) {
-        if (i !in paths.indices) return
-        index = i
-        player.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(paths[i]))))
-        player.prepare()
-        player.playWhenReady = true
-        player.shuffleModeEnabled = shuffle
+    val hub = AudioHub
+    // 首次进入：如果已经在播同一首就接着看，否则从当前这首开始播
+    LaunchedEffect(Unit) {
+        val cur = hub.currentPath()
+        if (cur == null || cur != paths[start.coerceIn(0, paths.size - 1)]) {
+            hub.play(paths, start.coerceIn(0, paths.size - 1), ctx)
+        }
     }
+    LaunchedEffect(Unit) {
+        while (true) {
+            hub.tick()
+            pendingSeek?.let { target ->
+                if (kotlin.math.abs(hub.position - target) < 1200) pendingSeek = null
+            }
+            tick = System.currentTimeMillis()
+            delay(300)
+        }
+    }
+
+    val index = hub.index.coerceIn(0, paths.size - 1)
+    val playing = hub.playing
+    val position = hub.position
+    val duration = hub.duration
 
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -265,41 +277,6 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             } catch (_: Throwable) {
                 toast = "设置封面失败"
             }
-        }
-    }
-
-    DisposableEffect(Unit) {
-        val l = object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_READY) duration = player.duration.coerceAtLeast(0)
-                if (state == Player.STATE_ENDED) endedTick++
-            }
-        }
-        player.addListener(l)
-        onDispose { player.removeListener(l); player.release() }
-    }
-
-    LaunchedEffect(endedTick) {
-        if (endedTick > 0) {
-            if (repeatMode == 1) {
-                player.seekTo(0)
-                player.play()
-            } else if (index < paths.size - 1) {
-                load(index + 1)
-            } else if (repeatMode == 2) {
-                load(0)
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) { load(index) }
-
-    LaunchedEffect(playing) {
-        while (playing) {
-            position = player.currentPosition
-            duration = player.duration.coerceAtLeast(0)
-            delay(300)
         }
     }
 
@@ -376,64 +353,59 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         )
 
         Spacer(Modifier.height(18.dp))
-        val sliderValue = seekDrag ?: if (duration > 0) position.toFloat() / duration else 0f
+        val shownPos = seekDrag?.let { (it * duration).toLong() } ?: pendingSeek ?: position
+        val sliderValue = if (duration > 0) shownPos.toFloat() / duration else 0f
         Slider(
             value = sliderValue.coerceIn(0f, 1f),
             onValueChange = { seekDrag = it },
             onValueChangeFinished = {
-                seekDrag?.let { player.seekTo((it * duration).toLong()) }
+                seekDrag?.let {
+                    val target = (it * duration).toLong()
+                    hub.seekTo(target)
+                    pendingSeek = target   // 等播放器真的走到这里再交还进度，避免进度条来回跳
+                }
                 seekDrag = null
             },
             colors = SliderDefaults.colors(thumbColor = BrandBlue, activeTrackColor = BrandBlue)
         )
         Row(Modifier.fillMaxWidth()) {
-            Text(fmtTime(seekDrag?.let { (it * duration).toLong() } ?: position), color = TextDim, fontSize = 11.sp)
+            Text(fmtTime(seekDrag?.let { (it * duration).toLong() } ?: pendingSeek ?: position), color = TextDim, fontSize = 11.sp)
             Spacer(Modifier.weight(1f))
             Text(fmtTime(duration), color = TextDim, fontSize = 11.sp)
         }
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = {
-                shuffle = !shuffle
-                player.shuffleModeEnabled = shuffle
-            }) { Icon(Icons.Filled.Shuffle, null, tint = if (shuffle) BrandBlue else TextDim) }
-            IconButton(onClick = { load(index - 1) }, enabled = index > 0) {
-                Icon(Icons.Filled.SkipPrevious, null, tint = if (index > 0) TextDim else Color(0x33FFFFFF))
+            IconButton(onClick = { hub.setShuffle(!hub.shuffle) }) {
+                Icon(Icons.Filled.Shuffle, null, tint = if (hub.shuffle) BrandBlue else TextDim)
             }
-            FloatingActionButton(onClick = {
-                if (player.isPlaying) player.pause() else player.play()
-            }, containerColor = BrandBlue) {
+            IconButton(onClick = { hub.prev() }) {
+                Icon(Icons.Filled.SkipPrevious, null, tint = TextDim)
+            }
+            FloatingActionButton(onClick = { hub.toggle() }, containerColor = BrandBlue) {
                 Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(30.dp))
             }
-            IconButton(onClick = { load(index + 1) }, enabled = index < paths.size - 1) {
-                Icon(Icons.Filled.SkipNext, null, tint = if (index < paths.size - 1) TextDim else Color(0x33FFFFFF))
+            IconButton(onClick = { hub.next() }) {
+                Icon(Icons.Filled.SkipNext, null, tint = TextDim)
             }
-            IconButton(onClick = {
-                repeatMode = (repeatMode + 1) % 3
-                player.repeatMode = when (repeatMode) {
-                    1 -> Player.REPEAT_MODE_ONE
-                    2 -> Player.REPEAT_MODE_ALL
-                    else -> Player.REPEAT_MODE_OFF
-                }
-            }) {
+            IconButton(onClick = { hub.cycleRepeat() }) {
                 Icon(
-                    if (repeatMode == 1) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    if (hub.repeatMode == 1) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
                     null,
-                    tint = if (repeatMode != 0) BrandBlue else TextDim
+                    tint = if (hub.repeatMode != 0) BrandBlue else TextDim
                 )
             }
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            when (repeatMode) { 1 -> "单曲循环"; 2 -> "列表循环"; else -> "顺序播放" } + if (shuffle) " · 随机" else "",
+            when (hub.repeatMode) { 1 -> "单曲循环"; 2 -> "列表循环"; else -> "顺序播放" } + if (hub.shuffle) " · 随机" else "",
             color = TextDim, fontSize = 11.sp, modifier = Modifier.fillMaxWidth(),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         Spacer(Modifier.weight(1f))
         Text(
-            "滑动/左右按钮切换 · 长按可回到列表",
-            color = Color(0x55FFFFFF), fontSize = 10.sp,
+            "返回、小窗、后台都会继续播放 · 通知栏可控制",
+            color = Color(0x33FFFFFF), fontSize = 10.sp,
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )

@@ -7,6 +7,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.data.TypeDetect
+import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.toFullTime
 import com.luogen.filehub.model.toSizeText
@@ -210,6 +213,9 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     var results by remember { mutableStateOf<List<FileItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var searched by remember { mutableStateOf(false) }
+    var filt by remember { mutableStateOf<Cat?>(null) }
+    var excluded by remember { mutableStateOf<Set<Cat>>(emptySet()) }
+    var showExclude by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) {
@@ -230,11 +236,51 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
         loading = true
         delay(180)
         val r = withContext(Dispatchers.IO) {
-            try { repo.searchAll(q, 200) } catch (_: Throwable) { emptyList() }
+            val media = try { repo.searchAll(q, 200) } catch (_: Throwable) { emptyList() }
+            // MediaStore 还没索引到（刚下载/刚改名）时，直接扫常用目录兜底，保证第一次就能搜到
+            if (media.isEmpty() || media.size < 3) {
+                val extra = try { repo.scanFallback(q, 200) } catch (_: Throwable) { emptyList() }
+                (media + extra).distinctBy { it.path }
+            } else media
         }
         results = r
         searched = true
         loading = false
+    }
+
+    val shown = remember(results, filt, excluded) {
+        results.filter {
+            val c = TypeDetect.catOf(it.name, it.mime)
+            (filt == null || c == filt) && c !in excluded
+        }
+    }
+
+    if (showExclude) {
+        val cats = listOf(Cat.IMAGE to "图片", Cat.VIDEO to "视频", Cat.AUDIO to "音频", Cat.DOC to "文档", Cat.ARCHIVE to "压缩包", Cat.APP to "应用")
+        AlertDialog(
+            onDismissRequest = { showExclude = false },
+            title = { Text("排除这些类型") },
+            text = {
+                Column {
+                    cats.forEach { (c, name) ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = c in excluded,
+                                onCheckedChange = { on ->
+                                    excluded = if (on) excluded + c else excluded - c
+                                }
+                            )
+                            Text(name, fontSize = 14.sp)
+                        }
+                    }
+                    Text("勾选的类型不会出现在搜索结果里", fontSize = 11.sp, color = TextDim)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showExclude = false }) { Text("完成") } },
+            dismissButton = {
+                TextButton(onClick = { excluded = emptySet(); showExclude = false }) { Text("清空排除") }
+            }
+        )
     }
 
     Scaffold(
@@ -275,7 +321,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                 Text(
                     when {
                         loading -> "正在搜索…"
-                        searched -> "找到 ${results.size} 个结果"
+                        searched -> "找到 ${shown.size} 个结果"
                         else -> "输入关键词，边打边出结果"
                     },
                     color = TextDim, fontSize = 11.sp, modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
@@ -286,15 +332,15 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
                 query.isBlank() -> EmptyView("输入文件名关键词即可实时搜索")
-                results.isEmpty() && searched -> EmptyView("没有匹配的文件")
+                shown.isEmpty() && searched -> EmptyView("没有匹配的文件")
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(count = results.size, key = { results[it].key }) { idx ->
-                        val item = results[idx]
+                    items(count = shown.size, key = { shown[it].key }) { idx ->
+                        val item = shown[idx]
                         FileRow(
                             item = item,
                             selected = false,
                             selectionMode = false,
-                            onClick = { openItem(ctx, nav, item, results) },
+                            onClick = { openItem(ctx, nav, item, shown) },
                             onLongClick = {},
                             trailing = { Text(itemCat(item).title, color = TextDim, fontSize = 11.sp) }
                         )

@@ -146,6 +146,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             prog = null
             toast = msg
             AppState.drop(cacheKey)
+            AppState.countsDirty = true
             force++
             selected = emptySet()
         }
@@ -190,6 +191,47 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
     }
+    // 实时性：媒体库变化（改名/下载/删除）与安装/卸载应用都触发静默刷新
+    DisposableEffect(cacheKey) {
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val co = object : android.database.ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) {
+                if (cat != Cat.APP) {
+                    AppState.drop(cacheKey)
+                    AppState.countsDirty = true
+                    force++
+                }
+            }
+        }
+        try {
+            ctx.contentResolver.registerContentObserver(
+                android.provider.MediaStore.Files.getContentUri("external"), true, co
+            )
+        } catch (_: Throwable) {}
+        val pkgReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context?, i: android.content.Intent?) {
+                if (cat == Cat.APP) {
+                    AppState.drop(cacheKey)
+                    AppState.countsDirty = true
+                    force++
+                }
+            }
+        }
+        try {
+            val f = android.content.IntentFilter().apply {
+                addAction(android.content.Intent.ACTION_PACKAGE_REMOVED)
+                addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
+                addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
+                addDataScheme("package")
+            }
+            ctx.registerReceiver(pkgReceiver, f)
+        } catch (_: Throwable) {}
+        onDispose {
+            try { ctx.contentResolver.unregisterContentObserver(co) } catch (_: Throwable) {}
+            try { ctx.unregisterReceiver(pkgReceiver) } catch (_: Throwable) {}
+        }
+    }
+
     // 换排序 / 搜索 / 切换已安装·安装包：回到列表最顶部
     LaunchedEffect(sortMode, asc, query, appTab, gridMode) {
         try { listState.scrollToItem(0) } catch (_: Throwable) {}
@@ -202,7 +244,11 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             val atTop = listState.firstVisibleItemIndex <= 4 && gridState.firstVisibleItemIndex <= 4
             if (!atTop) {
                 SmallFloatingActionButton(
-                    onClick = { scope.launch { listState.animateScrollToItem(0); gridState.animateScrollToItem(0) } },
+                    onClick = {
+                        scope.launch {
+                            try { if (gridMode) gridState.animateScrollToItem(0) else listState.animateScrollToItem(0) } catch (_: Throwable) {}
+                        }
+                    },
                     containerColor = SurfaceDark, contentColor = BrandBlue
                 ) { Icon(Icons.Filled.VerticalAlignTop, null) }
             }
@@ -353,9 +399,12 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                         ActionSpec("重命名", Icons.Filled.DriveFileRenameOutline) {
                             if (selItems.size == 1) showRename = selItems[0] else showBatch = selItems
                         },
-                        ActionSpec("收藏", Icons.Filled.Bookmark) {
+                        ActionSpec(if (cat == Cat.FAV) "取消收藏" else "收藏", if (cat == Cat.FAV) Icons.Filled.BookmarkRemove else Icons.Filled.Bookmark) {
                             selItems.forEach { Prefs.toggleFav(it.path) }
-                            toast = "收藏状态已更新"
+                            AppState.drop(cacheKey)
+                            AppState.countsDirty = true
+                            toast = if (cat == Cat.FAV) "已取消收藏" else "收藏状态已更新"
+                            force++
                             selected = emptySet()
                         },
                         ActionSpec(if (cat == Cat.ARCHIVE) "解压" else "压缩", Icons.Filled.FolderZip) {
@@ -707,7 +756,7 @@ private fun openByCat(
         if (appTab == 1) {
             if (!FileOps.installApk(ctx, item.path)) toast("已跳转授权，请允许安装未知应用后再点一次")
         } else {
-            if (!FileOps.launchApp(ctx, item.packageName)) toast("打开失败")
+            FileOps.launchApp(ctx, item.packageName)?.let { toast(it) }
         }
         return
     }
@@ -782,6 +831,7 @@ private fun ListCell(
     onRefresh: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val installed = cat == Cat.APP && appTab == 0
 
@@ -806,7 +856,7 @@ private fun ListCell(
                     if (installed) {
                         DropdownMenuItem(text = { Text("打开应用") }, onClick = {
                             menu = false
-                            if (!FileOps.launchApp(ctx, item.packageName)) onMsg("打开失败")
+                            FileOps.launchApp(ctx, item.packageName)?.let { onMsg(it) }
                         })
                         DropdownMenuItem(text = { Text("提取安装包") }, onClick = { menu = false; onExtract() })
                         DropdownMenuItem(text = { Text("应用信息") }, onClick = {
@@ -816,6 +866,24 @@ private fun ListCell(
                         DropdownMenuItem(text = { Text("卸载") }, onClick = {
                             menu = false
                             FileOps.uninstall(ctx, item.packageName)
+                        })
+                    } else if (cat == Cat.ARCHIVE) {
+                        DropdownMenuItem(text = { Text("解压 / 查看内容") }, onClick = {
+                            menu = false
+                            nav.push(Screen.ArchiveView(item.path))
+                        })
+                        DropdownMenuItem(text = { Text("解压到 Download") }, onClick = {
+                            menu = false
+                            scope.launch {
+                                onMsg("正在解压…")
+                                val dest = File(
+                                    android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+                                    item.name.substringBeforeLast('.').ifEmpty { item.name }
+                                )
+                                val r = withContext(Dispatchers.IO) { ArchiveUtil.extract(File(item.path), dest) }
+                                onMsg(r.message)
+                                onRefresh()
+                            }
                         })
                     } else if (cat == Cat.APP && appTab == 1) {
                         DropdownMenuItem(text = { Text("安装") }, onClick = {
@@ -908,12 +976,13 @@ private fun infoRows(item: FileItem): List<Pair<String, String>> {
     rows.add("大小" to item.size.toSizeText())
     if (item.modified > 0) rows.add("修改时间" to item.modified.toFullTime())
     if (item.ext.isNotEmpty()) rows.add("扩展名" to item.ext.uppercase())
-    rows.add("类型判定" to TypeDetect.catOf(item.name, item.mime).title)
+    rows.add("文件类型" to TypeDetect.labelOf(item.name, item.mime))
     if (item.path.isNotEmpty()) rows.add("完整路径" to item.path)
     val f = File(item.path)
     if (f.exists() && !f.isDirectory) {
         val magic = TypeDetect.detectByMagic(f)
         rows.add("文件头识别" to (magic?.uppercase() ?: "无法识别"))
+        TypeDetect.mismatchHint(f)?.let { rows.add("提示" to it) }
     }
     if (item.extra.isNotEmpty()) rows.add("备注" to item.extra)
     return rows

@@ -46,7 +46,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
     var storage by remember { mutableStateOf(AppState.storage ?: StorageInfo()) }
     var extra by remember { mutableStateOf(0 to 0) }
     var refreshing by remember { mutableStateOf(AppState.counts == null) }
-    var volumes by remember { mutableStateOf<List<VolumeInfo>>(emptyList()) }
+    var volumes by remember { mutableStateOf<List<VolumeInfo>>(AppState.volumes ?: emptyList()) }
     var volTick by remember { mutableStateOf(0) }
 
     // 插拔 U 盘 / SD 卡时即时刷新
@@ -68,10 +68,27 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
     }
 
     LaunchedEffect(volTick) {
-        volumes = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
+        val v = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
+        volumes = v
+        AppState.storeVolumes(v)
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(Unit, AppState.countsDirty) {
+        if (AppState.countsDirty) {
+            // 有删除/收藏等操作：静默刷新统计，不显示“扫描中”
+            val c = withContext(Dispatchers.IO) { try { repo.counts() } catch (_: Throwable) { emptyMap() } }
+            val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
+            val vault = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
+            if (c.isNotEmpty()) {
+                counts = c
+                AppState.storeCounts(c)
+                Prefs.setCountsCache(c)
+            }
+            extra = trash to vault
+            AppState.countsDirty = false
+            refreshing = false
+            return@LaunchedEffect
+        }
         if (!AppState.countsFresh()) {
             refreshing = true
             val s = withContext(Dispatchers.IO) { try { repo.storage() } catch (_: Throwable) { StorageInfo() } }
@@ -197,7 +214,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text("v1.2.0 · 罗根", color = TextDim, fontSize = 11.sp)
+        Text("v1.3.0 · 罗根", color = TextDim, fontSize = 11.sp)
         Spacer(Modifier.height(20.dp))
     }
 }

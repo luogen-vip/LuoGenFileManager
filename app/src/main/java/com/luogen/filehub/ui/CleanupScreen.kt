@@ -5,11 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +49,10 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
     var toast by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableStateOf(0) }
     var showUninstall by remember { mutableStateOf<FileItem?>(null) }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf("cleanup"))
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll("cleanup", it) }
+    }
 
     LaunchedEffect(refresh, AppState.cleanDirty) {
         val silent = AppState.cleanSizes != null
@@ -173,7 +179,7 @@ fun CleanupScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             if (loading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = BrandBlue) }
             } else {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     item {
                         Column(Modifier.padding(16.dp)) {
                             val ratio = if (storage.total > 0) storage.used.toFloat() / storage.total else 0f

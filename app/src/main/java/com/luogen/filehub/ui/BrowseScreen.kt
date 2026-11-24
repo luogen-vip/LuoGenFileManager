@@ -67,6 +67,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     var showInfo by remember { mutableStateOf<FileItem?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var prog by remember { mutableStateOf<Prog?>(null) }
+    var loading by remember { mutableStateOf(false) }
     var sortExpanded by remember { mutableStateOf(false) }
     val startPath = dirPath
     val rootPath = android.os.Environment.getExternalStorageDirectory().absolutePath
@@ -74,20 +75,53 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     LaunchedEffect(current.absolutePath) {
         volumes = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
     }
-    val listKey = "browse:$startPath"
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf(listKey))
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex }.collect { AppState.keepScroll(listKey, it) }
-    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = AppState.scrollOf("browse:" + dirPath))
     LaunchedEffect(sortMode, asc, query) {
         try { listState.scrollToItem(0) } catch (_: Throwable) {}
     }
 
-    // 返回键：有勾选先取消勾选
-    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
+    // 系统返回键：与左上角箭头一致 —— 先取消勾选，再回上一级文件夹，最后才退出
+    BackHandler(enabled = true) {
+        when {
+            selected.isNotEmpty() -> selected = emptySet()
+            current.absolutePath != startPath && current.absolutePath != rootPath && current.parentFile != null ->
+                current = current.parentFile!!
+            else -> nav.pop()
+        }
+    }
 
-    LaunchedEffect(current, refresh) {
-        items = withContext(Dispatchers.IO) { repo.listDir(current) }
+    LaunchedEffect(current.absolutePath, refresh) {
+        loading = true
+        items = emptyList()
+        val loaded = withContext(Dispatchers.IO) { try { repo.listDir(current) } catch (_: Throwable) { emptyList() } }
+        items = loaded
+        loading = false
+        // 恢复这个文件夹上次的滚动位置
+        try {
+            val saved = AppState.scrollOf("browse:" + current.absolutePath)
+            if (saved > 0) listState.scrollToItem(saved.coerceAtMost((loaded.size - 1).coerceAtLeast(0)))
+        } catch (_: Throwable) {}
+    }
+    // 当前文件夹有增删改名时自动刷新，不用手动点刷新
+    DisposableEffect(current.absolutePath) {
+        val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val obs = try {
+            object : android.os.FileObserver(
+                current.absolutePath,
+                CREATE or DELETE or MOVED_TO or MOVED_FROM or MODIFY or CLOSE_WRITE
+            ) {
+                override fun onEvent(event: Int, path: String?) {
+                    mainHandler.post { refresh++ }
+                }
+            }.also { it.startWatching() }
+        } catch (_: Throwable) { null }
+        onDispose { try { obs?.stopWatching() } catch (_: Throwable) {} }
+    }
+
+    LaunchedEffect(current.absolutePath) {
+        snapshotFlow { listState.firstVisibleItemIndex }.collect {
+            AppState.keepScroll("browse:" + current.absolutePath, it)
+        }
     }
 
     val display = remember(items, query, sortMode, asc) {
@@ -123,7 +157,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                         IconButton(onClick = {
                             if (selected.isNotEmpty()) {
                                 selected = emptySet()
-                            } else if (current.absolutePath != startPath && current.parentFile != null) {
+                            } else if (current.absolutePath != startPath && current.absolutePath != rootPath && current.parentFile != null) {
                                 current = current.parentFile!!
                             } else {
                                 nav.pop()
@@ -152,7 +186,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                                 }
                             }
                         }
-                        IconButton(onClick = { refresh++ }) { Icon(Icons.Filled.Refresh, null, tint = TextMain) }
+                        IconButton(onClick = { refresh++; toast = "已刷新" }) { Icon(Icons.Filled.Refresh, null, tint = TextMain) }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
                 )
@@ -226,7 +260,11 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (display.isEmpty()) {
+            if (loading && items.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = BrandBlue)
+                }
+            } else if (display.isEmpty()) {
                 EmptyView(if (query.isNotEmpty()) "没有匹配项" else "这个文件夹是空的")
             } else {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
