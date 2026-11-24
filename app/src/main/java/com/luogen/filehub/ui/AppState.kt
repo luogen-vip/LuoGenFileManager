@@ -100,6 +100,12 @@ object AppState {
     var storageAt: Long = 0L
         private set
 
+    fun invalidateCounts() {
+        counts = null
+        countsAt = 0L
+        countsDirty = true
+    }
+
     fun countsFresh(): Boolean = counts != null && System.currentTimeMillis() - countsAt < 10 * 60 * 1000L
     fun storeCounts(c: Map<Cat, Int>) {
         counts = c

@@ -71,6 +71,7 @@ fun AppRoot() {
 
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         granted = hasAllFilesAccess(ctx) || result.values.any { it }
+        if (granted) { AppState.invalidateCounts(); AppState.dropAllLists() }
     }
 
     var showPerm by remember { mutableStateOf(false) }
@@ -83,7 +84,11 @@ fun AppRoot() {
         while (true) {
             kotlinx.coroutines.delay(1200)
             val now = hasAllFilesAccess(ctx)
-            if (now && !granted) granted = true
+            if (now && !granted) {
+                granted = true
+                AppState.invalidateCounts()
+                AppState.dropAllLists()
+            }
             if (now) showPerm = false
         }
     }

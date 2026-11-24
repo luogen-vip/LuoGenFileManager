@@ -500,7 +500,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                 items(count = g.list.size, key = { idx -> g.list[idx].key }) { idx ->
                                     val it0 = g.list[idx]
                                     ListCell(
-                                        ctx = ctx, nav = nav, item = it0, siblings = g.list, cat = cat, appTab = appTab,
+                                        ctx = ctx, nav = nav, item = it0, siblings = display, cat = cat, appTab = appTab,
                                         selected = selected.contains(it0.key),
                                         selectionMode = selected.isNotEmpty(),
                                         onToggle = { toggleSel(selected, it0.key) { selected = it } },

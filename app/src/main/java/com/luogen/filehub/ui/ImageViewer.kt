@@ -6,8 +6,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
@@ -74,6 +76,7 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var toast by remember { mutableStateOf<String?>(null) }
     var renameFor by remember { mutableStateOf<String?>(null) }
     var zoomed by remember { mutableStateOf(false) }
+    LaunchedEffect(pagerState.currentPage) { zoomed = false }
 
     val cur = paths[pagerState.currentPage]
     fun itemOf(p: String) = FileItem(path = p, name = File(p).name, size = File(p).length(), mime = TypeDetect.mimeOf(p))
@@ -237,28 +240,42 @@ private fun ImagePage(
                 detectTapGestures(onTap = { onTap() })
             }
             .pointerInput(path, size) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    val ns = (scale * zoom).coerceIn(1f, 5f)
-                    val mx = (size.width * (ns - 1f) / 2f).coerceAtLeast(0f)
-                    val my = (size.height * (ns - 1f) / 2f).coerceAtLeast(0f)
-                    val nx = (offset.x + pan.x).coerceIn(-mx, mx)
-                    val ny = (offset.y + pan.y).coerceIn(-my, my)
-                    if (ns <= 1.01f) {
-                        scale = 1f
-                        offset = Offset.Zero
-                        paged = false
-                    } else {
-                        scale = ns
-                        // 已经顶到边缘又继续往里拖，才翻到上一张/下一张
-                        if (mx > 0f && nx >= mx - 1f && pan.x > 24f && !paged) {
-                            paged = true
-                            onEdgePrev()
-                        } else if (mx > 0f && nx <= -mx + 1f && pan.x < -24f && !paged) {
-                            paged = true
-                            onEdgeNext()
+                // 只有双指、或者已经放大时才接管手势；没放大时单指左右滑必须交给翻页
+                awaitEachGesture {
+                    var multi = false
+                    var active = true
+                    while (active) {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.count { it.pressed }
+                        if (pressed >= 2) multi = true
+                        if (multi || scale > 1.01f) {
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            val ns = (scale * zoom).coerceIn(1f, 5f)
+                            val mx = (size.width * (ns - 1f) / 2f).coerceAtLeast(0f)
+                            val my = (size.height * (ns - 1f) / 2f).coerceAtLeast(0f)
+                            val nx = (offset.x + pan.x).coerceIn(-mx, mx)
+                            val ny = (offset.y + pan.y).coerceIn(-my, my)
+                            if (ns <= 1.01f) {
+                                scale = 1f
+                                offset = Offset.Zero
+                            } else {
+                                scale = ns
+                                // 拼到边缘继续往里拖，才翻上一张/下一张
+                                if (mx > 0f && nx >= mx - 1f && pan.x > 24f && !paged) {
+                                    paged = true
+                                    onEdgePrev()
+                                } else if (mx > 0f && nx <= -mx + 1f && pan.x < -24f && !paged) {
+                                    paged = true
+                                    onEdgeNext()
+                                }
+                                offset = Offset(nx, ny)
+                            }
+                            event.changes.forEach { it.consume() }
                         }
-                        offset = Offset(nx, ny)
+                        if (event.changes.all { !it.pressed }) active = false
                     }
+                    paged = false
                 }
             },
         contentAlignment = Alignment.Center

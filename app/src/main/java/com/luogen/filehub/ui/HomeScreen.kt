@@ -33,6 +33,10 @@ import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private fun mediaSum(c: Map<Cat, Int>): Int =
+    (c[Cat.IMAGE] ?: 0) + (c[Cat.VIDEO] ?: 0) + (c[Cat.AUDIO] ?: 0) +
+        (c[Cat.DOC] ?: 0) + (c[Cat.ARCHIVE] ?: 0) + (c[Cat.DOWNLOAD] ?: 0)
+
 private val homeCats = listOf(
     Cat.IMAGE, Cat.VIDEO, Cat.AUDIO, Cat.DOC, Cat.APP, Cat.ARCHIVE,
     Cat.FAV, Cat.DOWNLOAD, Cat.FILE, Cat.TRASH, Cat.VAULT, Cat.CLEAN
@@ -85,6 +89,21 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         AppState.storeVolumes(v)
     }
 
+    // 兜底：每 10 秒静默校正一次分类数量，刚下载/刚改名的文件也能自己出现在首页
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(10000)
+            if (hasAllFilesAccess(ctx)) {
+                val c = withContext(Dispatchers.IO) { try { repo.counts() } catch (_: Throwable) { emptyMap() } }
+                if (c.isNotEmpty() && mediaSum(c) > 0) {
+                    counts = c
+                    AppState.storeCounts(c)
+                    Prefs.setCountsCache(c)
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit, AppState.countsDirty) {
         if (AppState.countsDirty) {
             // 有删除/收藏等操作：静默刷新统计与存储已用，不显示“扫描中”
@@ -96,7 +115,8 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             val c = withContext(Dispatchers.IO) { try { repo.counts() } catch (_: Throwable) { emptyMap() } }
             val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
             val vault = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
-            if (c.isNotEmpty()) {
+            // 没权限时 MediaStore 会全返回 0：这种“假零”不缓存，等授权后重算
+            if (c.isNotEmpty() && mediaSum(c) > 0) {
                 counts = c
                 AppState.storeCounts(c)
                 Prefs.setCountsCache(c)
@@ -117,7 +137,8 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             val c = withContext(Dispatchers.IO) { try { repo.counts() } catch (_: Throwable) { emptyMap() } }
             val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
             val vault = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
-            if (c.isNotEmpty()) {
+            // 没权限时 MediaStore 会全返回 0：这种“假零”不缓存，等授权后重算
+            if (c.isNotEmpty() && mediaSum(c) > 0) {
                 counts = c
                 AppState.storeCounts(c)
                 Prefs.setCountsCache(c)
@@ -266,7 +287,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text("v1.4.1 · 罗根", color = TextDim, fontSize = 11.sp)
+        Text("v1.4.2 · 罗根", color = TextDim, fontSize = 11.sp)
         Spacer(Modifier.height(20.dp))
     }
 }
