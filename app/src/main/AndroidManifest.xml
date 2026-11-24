@@ -32,6 +32,7 @@
 
         <activity
             android:name=".ui.MainActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:theme="@style/Theme.LuoGenFileManager"
@@ -43,12 +44,12 @@
         </activity>
 
         <service
-            android:name=".AudioFgService"
+            android:name=".data.AudioFgService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
         <receiver
-            android:name=".AudioActionReceiver"
+            android:name=".data.AudioActionReceiver"
             android:exported="false" />
 
         <provider

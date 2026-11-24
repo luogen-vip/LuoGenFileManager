@@ -24,6 +24,9 @@ import javax.crypto.SecretKey
 object AppState {
     val nav = NavStack()
 
+    /** 点通知栏/首页迷你播放器时要打开的播放页 */
+    var audioOpenRequested by mutableStateOf(false)
+
     // ---------- 滚动位置 ----------
     private val scroll = HashMap<String, Int>()
     fun scrollOf(key: String): Int = scroll[key] ?: 0

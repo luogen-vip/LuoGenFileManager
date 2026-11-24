@@ -8,6 +8,9 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -27,6 +30,7 @@ import java.io.File
  */
 object AudioHub {
     private var player: ExoPlayer? = null
+    private var session: MediaSession? = null
     private var appCtx: Context? = null
 
     var playlist: List<String> = emptyList()
@@ -54,25 +58,42 @@ object AudioHub {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
+                pushState()
                 refreshNotification()
             }
 
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
                     duration = p.duration.coerceAtLeast(0)
-                    refreshNotification()
                 }
+                pushState()
+                refreshNotification()
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 index = p.currentMediaItemIndex.coerceAtLeast(0)
                 duration = p.duration.coerceAtLeast(0)
                 position = 0
+                pushState()
                 refreshNotification()
             }
         })
         p.repeatMode = Player.REPEAT_MODE_OFF
         player = p
+        if (session == null) {
+            val s = MediaSession(ctx.applicationContext, "LuoGenFileManager")
+            s.setCallback(object : MediaSession.Callback() {
+                override fun onPlay() { player?.play() }
+                override fun onPause() { player?.pause() }
+                override fun onSkipToNext() { next() }
+                override fun onSkipToPrevious() { prev() }
+                override fun onSeekTo(pos: Long) { seekTo(pos) }
+                override fun onStop() { stopAndClear() }
+            })
+            s.isActive = true
+            session = s
+        }
+        pushState()
         return p
     }
 
@@ -96,6 +117,7 @@ object AudioHub {
         p.seekTo(idx, 0)
         p.prepare()
         p.playWhenReady = true
+        pushState()
         startForegroundService()
         refreshNotification()
     }
@@ -103,10 +125,14 @@ object AudioHub {
     fun toggle() {
         val p = player ?: return
         if (p.isPlaying) p.pause() else p.play()
+        pushState()
+        refreshNotification()
     }
 
     fun pauseForVideo() {
         player?.pause()
+        pushState()
+        refreshNotification()
     }
 
     fun next() {
@@ -126,6 +152,7 @@ object AudioHub {
     fun seekTo(ms: Long) {
         player?.seekTo(ms.coerceAtLeast(0))
         position = ms.coerceAtLeast(0)
+        pushState()
     }
 
     fun setShuffle(on: Boolean) {
@@ -161,6 +188,37 @@ object AudioHub {
         startedService = false
     }
 
+    private fun pushState() {
+        val s = session ?: return
+        val p = player ?: return
+        try {
+            val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
+                PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or
+                PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_SEEK_TO or
+                PlaybackState.ACTION_STOP
+            val state = when {
+                p.isPlaying -> PlaybackState.STATE_PLAYING
+                p.playbackState == Player.STATE_BUFFERING -> PlaybackState.STATE_BUFFERING
+                p.playbackState == Player.STATE_ENDED -> PlaybackState.STATE_STOPPED
+                else -> PlaybackState.STATE_PAUSED
+            }
+            s.setPlaybackState(
+                PlaybackState.Builder()
+                    .setActions(actions)
+                    .setState(state, p.currentPosition, if (p.isPlaying) 1f else 0f)
+                    .build()
+            )
+            val path = currentPath()
+            s.setMetadata(
+                MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, path?.let { File(it).name } ?: "罗根文件管家")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, "罗根文件管家")
+                    .putLong(MediaMetadata.METADATA_KEY_DURATION, duration)
+                    .build()
+            )
+        } catch (_: Throwable) {}
+    }
+
     private fun startForegroundService() {
         val c = appCtx ?: return
         if (startedService) return
@@ -171,18 +229,21 @@ object AudioHub {
         } catch (_: Throwable) {}
     }
 
-    fun refreshNotification() {
-        val ctx = appCtx ?: return
-        val p = player ?: return
-        val path = currentPath() ?: return
-        try {
+    fun buildNotification(): Notification? {
+        val ctx = appCtx ?: return null
+        player ?: return null
+        val path = currentPath() ?: return null
+        return try {
             val nm = ctx.getSystemService(NotificationManager::class.java)
             val channel = "luogen_audio"
             if (Build.VERSION.SDK_INT >= 26) {
                 nm.createNotificationChannel(NotificationChannel(channel, "音频播放", NotificationManager.IMPORTANCE_LOW))
             }
+            val openIntent = Intent(ctx, MainActivity::class.java)
+                .putExtra("open_audio", true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             val open = PendingIntent.getActivity(
-                ctx, 0, Intent(ctx, MainActivity::class.java),
+                ctx, 10, openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             fun act(code: String, icon: Int, title: String): Notification.Action {
@@ -212,11 +273,21 @@ object AudioHub {
                 .addAction(act("next", android.R.drawable.ic_media_next, "下一曲"))
                 .setStyle(
                     Notification.MediaStyle()
+                        .setMediaSession(session?.sessionToken)
                         .setShowActionsInCompactView(0, 1, 2)
                 )
-            nm.notify(1002, builder.build())
+            builder.build()
         } catch (_: Throwable) {
+            null
         }
+    }
+
+    fun refreshNotification() {
+        val ctx = appCtx ?: return
+        val n = buildNotification() ?: return
+        try {
+            ctx.getSystemService(NotificationManager::class.java).notify(1001, n)
+        } catch (_: Throwable) {}
     }
 
     fun handleAction(action: String?) {
@@ -231,7 +302,7 @@ object AudioHub {
 
 private object NotificationManagerCompatSafe {
     fun cancel(ctx: Context) {
-        try { ctx.getSystemService(NotificationManager::class.java).cancel(1002) } catch (_: Throwable) {}
+        try { ctx.getSystemService(NotificationManager::class.java).cancel(1001) } catch (_: Throwable) {}
     }
 }
 
@@ -249,18 +320,23 @@ class AudioFgService : Service() {
         try {
             val ctx = applicationContext
             AudioHub.ensure(ctx)
-            AudioHub.refreshNotification()
-            val nm = ctx.getSystemService(NotificationManager::class.java)
-            val channel = "luogen_audio"
-            if (Build.VERSION.SDK_INT >= 26) {
-                nm.createNotificationChannel(NotificationChannel(channel, "音频播放", NotificationManager.IMPORTANCE_LOW))
+            // 直接复用同一个媒体通知（带上一曲/播放暂停/下一曲），不再额外弹一条“音频播放中”
+            val n = AudioHub.buildNotification()
+            if (n != null) {
+                startForeground(1001, n)
+            } else {
+                val channel = "luogen_audio"
+                val nm = ctx.getSystemService(NotificationManager::class.java)
+                if (Build.VERSION.SDK_INT >= 26) {
+                    nm.createNotificationChannel(NotificationChannel(channel, "音频播放", NotificationManager.IMPORTANCE_LOW))
+                }
+                val fb = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(ctx, channel) else Notification.Builder(ctx)
+                fb.setSmallIcon(android.R.drawable.ic_media_play)
+                    .setContentTitle("罗根文件管家")
+                    .setContentText("音频播放中")
+                    .setOngoing(true)
+                startForeground(1001, fb.build())
             }
-            val n = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(ctx, channel) else Notification.Builder(ctx)
-            n.setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle("罗根文件管家")
-                .setContentText("音频播放中")
-                .setOngoing(true)
-            startForeground(1001, n.build())
         } catch (_: Throwable) {
         }
         return START_STICKY

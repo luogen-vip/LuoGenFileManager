@@ -75,7 +75,12 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
 
     LaunchedEffect(Unit, AppState.countsDirty) {
         if (AppState.countsDirty) {
-            // 有删除/收藏等操作：静默刷新统计，不显示“扫描中”
+            // 有删除/收藏等操作：静默刷新统计与存储已用，不显示“扫描中”
+            val s2 = withContext(Dispatchers.IO) { try { repo.storage() } catch (_: Throwable) { null } }
+            if (s2 != null && s2.total > 0) {
+                storage = s2
+                AppState.storeStorage(s2)
+            }
             val c = withContext(Dispatchers.IO) { try { repo.counts() } catch (_: Throwable) { emptyMap() } }
             val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
             val vault = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
@@ -92,8 +97,10 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         if (!AppState.countsFresh()) {
             refreshing = true
             val s = withContext(Dispatchers.IO) { try { repo.storage() } catch (_: Throwable) { StorageInfo() } }
-            storage = s
-            AppState.storeStorage(s)
+            if (s.total > 0) {
+                storage = s
+                AppState.storeStorage(s)
+            }
 
             val c = withContext(Dispatchers.IO) { try { repo.counts() } catch (_: Throwable) { emptyMap() } }
             val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
@@ -160,6 +167,11 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
             Text("搜索全部文件", color = TextDim, fontSize = 13.sp)
         }
 
+        if (com.luogen.filehub.data.AudioHub.currentPath() != null) {
+            Spacer(Modifier.height(10.dp))
+            MiniPlayerBar(nav)
+        }
+
         Spacer(Modifier.height(14.dp))
 
         StorageCard(
@@ -214,7 +226,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text("v1.3.0 · 罗根", color = TextDim, fontSize = 11.sp)
+        Text("v1.3.1 · 罗根", color = TextDim, fontSize = 11.sp)
         Spacer(Modifier.height(20.dp))
     }
 }
@@ -236,13 +248,13 @@ private fun StorageCard(storage: StorageInfo, totalItems: Int?, refreshing: Bool
             Icon(Icons.Filled.ChevronRight, null, tint = TextDim, modifier = Modifier.size(14.dp))
             Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    if (storage.total > 0) "总 ${storage.total.toSizeText()}" else "读取中…",
-                    color = TextDim, fontSize = 11.sp, maxLines = 1, softWrap = false
-                )
                 val nominal = nominalGb(storage.total)
-                if (nominal != null) {
-                    Text("标称 ${nominal}GB", color = TextDim, fontSize = 9.sp, maxLines = 1, softWrap = false)
+                Text(
+                    if (storage.total > 0) (nominal?.let { "$it GB" } ?: storage.total.toSizeText()) else "读取中…",
+                    color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false
+                )
+                if (nominal != null && storage.total > 0) {
+                    Text("实际可用 ${storage.total.toSizeText()}", color = TextDim, fontSize = 9.sp, maxLines = 1, softWrap = false)
                 }
             }
         }

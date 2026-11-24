@@ -594,7 +594,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                             val entries = TrashStore.list(ctx)
                             var ok = 0
                             list.forEach { s ->
-                                entries.firstOrNull { it.id == s.id }?.let { TrashStore.deletePermanent(ctx, it); ok++ }
+                                entries.firstOrNull { it.id == s.id }?.let { if (TrashStore.deletePermanent(ctx, it)) ok++ }
                             }
                             "已彻底删除 $ok 项"
                         } else {
@@ -907,9 +907,13 @@ private fun ListCell(
                         })
                         DropdownMenuItem(text = { Text("彻底删除") }, onClick = {
                             menu = false
-                            TrashStore.list(ctx).firstOrNull { it.id == item.id }?.let {
-                                TrashStore.deletePermanent(ctx, it)
-                                onMsg("已彻底删除")
+                            val e = TrashStore.list(ctx).firstOrNull { it.id == item.id }
+                            if (e == null) {
+                                onMsg("这条记录已经不在了")
+                            } else {
+                                val ok = TrashStore.deletePermanent(ctx, e)
+                                onMsg(if (ok) "已彻底删除" else "删除失败：文件被占用或没有权限")
+                                onRefresh()
                             }
                         })
                     } else if (!installed) {

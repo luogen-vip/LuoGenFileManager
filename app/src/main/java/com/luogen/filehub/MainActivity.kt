@@ -31,6 +31,7 @@ import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (intent?.getBooleanExtra("open_audio", false) == true) AppState.audioOpenRequested = true
         super.onCreate(savedInstanceState)
         Prefs.init(this)
         try {
@@ -43,6 +44,12 @@ class MainActivity : ComponentActivity() {
                 AppRoot()
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_audio", false)) AppState.audioOpenRequested = true
     }
 }
 
@@ -87,6 +94,16 @@ fun AppRoot() {
             onRecheck = { granted = hasAllFilesAccess(ctx) }
         )
     } else {
+        LaunchedEffect(AppState.audioOpenRequested) {
+            if (AppState.audioOpenRequested) {
+                AppState.audioOpenRequested = false
+                try {
+                    if (com.luogen.filehub.data.AudioHub.playlist.isNotEmpty()) {
+                        nav.push(Screen.AudioView(com.luogen.filehub.data.AudioHub.playlist, com.luogen.filehub.data.AudioHub.index))
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
         // 通知栏播放控制需要通知权限（Android 13+）
         if (Build.VERSION.SDK_INT >= 33) {
             val nm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }

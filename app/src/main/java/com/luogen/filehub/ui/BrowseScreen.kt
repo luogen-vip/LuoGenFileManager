@@ -68,6 +68,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     var toast by remember { mutableStateOf<String?>(null) }
     var prog by remember { mutableStateOf<Prog?>(null) }
     var loading by remember { mutableStateOf(false) }
+    var loadedPath by remember { mutableStateOf("") }
     var sortExpanded by remember { mutableStateOf(false) }
     val startPath = dirPath
     val rootPath = android.os.Environment.getExternalStorageDirectory().absolutePath
@@ -91,15 +92,20 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     }
 
     LaunchedEffect(current.absolutePath, refresh) {
-        loading = true
-        items = emptyList()
+        val changedDir = loadedPath != current.absolutePath
+        if (changedDir) items = emptyList()
+        loading = items.isEmpty()
         val loaded = withContext(Dispatchers.IO) { try { repo.listDir(current) } catch (_: Throwable) { emptyList() } }
         items = loaded
+        loadedPath = current.absolutePath
         loading = false
         // 恢复这个文件夹上次的滚动位置
         try {
             val saved = AppState.scrollOf("browse:" + current.absolutePath)
-            if (saved > 0) listState.scrollToItem(saved.coerceAtMost((loaded.size - 1).coerceAtLeast(0)))
+            if (saved > 0 && loaded.isNotEmpty()) {
+                kotlinx.coroutines.yield()
+                listState.scrollToItem(saved.coerceIn(0, (loaded.size - 1).coerceAtLeast(0)))
+            }
         } catch (_: Throwable) {}
     }
     // 当前文件夹有增删改名时自动刷新，不用手动点刷新
@@ -120,7 +126,8 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
 
     LaunchedEffect(current.absolutePath) {
         snapshotFlow { listState.firstVisibleItemIndex }.collect {
-            AppState.keepScroll("browse:" + current.absolutePath, it)
+            // 加载中/空列表时 index 会瞬间变成 0，不能拿它覆盖已保存的位置
+            if (!loading && items.isNotEmpty()) AppState.keepScroll("browse:" + current.absolutePath, it)
         }
     }
 

@@ -207,10 +207,13 @@ object TrashStore {
         return f
     }
 
-    fun deletePermanent(ctx: Context, entry: Entry) {
+    /** 彻底删除；只有磁盘上真的删掉了才移除索引，返回是否成功 */
+    fun deletePermanent(ctx: Context, entry: Entry): Boolean {
         val f = File(dir(ctx), entry.id)
-        deleteRecursive(f)
+        if (f.exists()) deleteRecursive(f)
+        if (f.exists()) return false
         removeMeta(ctx, entry.id)
+        return true
     }
 
     private fun removeMeta(ctx: Context, id: String) {
