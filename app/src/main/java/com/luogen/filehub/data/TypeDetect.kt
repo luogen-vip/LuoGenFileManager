@@ -66,13 +66,16 @@ object TypeDetect {
         "iso", "cab", "jar", "war", "apks", "lz", "lzma", "arj", "cpio", "whl", "crx",
         "xz", "txz", "z", "lzh", "lha", "xar", "pkg", "deb", "rpm", "apkg", "xapk", "obb",
         "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "zipx", "alz", "egg",
-        "tar.zst", "tzst", "tar.lz", "tar.lzma", "zstd", "lz4", "br", "rar5", "part1", "r00", "r01",
+        "tar.zst", "tzst", "tar.lz4", "tlz4", "tar.br", "tbr", "tar.lz", "tar.lzma", "zstd", "lz4", "br", "rar5", "part1", "r00", "r01",
         "001", "7z.001", "zip.001", "bzip2", "gzip", "compress", "zoo", "ace", "pea", "sit", "sitx", "hqx",
         "aab", "apkm", "jar", "war", "ear", "aar", "bundle", "framework", "toast", "b5t", "b6t",
         "ccd", "mds", "mdf", "nrg", "cdi", "daa", "uif", "isz", "vhd", "vhdx", "vmdk", "qcow",
         "qcow2", "ova", "ovf", "hdd", "vbox", "pvm", "cpio", "ar", "deb", "lzma", "tlz", "z", "sfx",
         "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lz4", "tar.lzma", "tar.lz", "tar.z", "tar.br",
-        "7z.001", "zip.001", "rar.001", "tar.001", "tar.gz.001"
+        "7z.001", "zip.001", "rar.001", "tar.001", "tar.gz.001",
+        "tar.zst.001", "tar.lz4.001", "tar.br.001",
+        "iso.001", "esd.001", "wim.001", "img.001", "bin.001", "dmg.001",
+        "qcow2.001", "vmdk.001", "vhd.001", "vhdx.001", "exe.001"
 
     )
 
@@ -734,6 +737,64 @@ object TypeDetect {
 
     private fun more4Label(e: String): String? = EXT_LABEL_MORE4[e]
 
+    /** 第六批：压缩/镜像/模型/医学影像/工程/邮件/电子书/统计/芯片固件等补充 */
+    private val EXT_LABEL_MORE5 = mapOf(
+        "zst" to "Zstandard 压缩文件", "zstd" to "Zstandard 压缩文件", "tzst" to "TAR.ZST 压缩包",
+        "lz4" to "LZ4 压缩文件", "tlz4" to "TAR.LZ4 压缩包",
+        "br" to "Brotli 压缩文件", "tbr" to "TAR.BR 压缩包",
+        "lzo" to "LZO 压缩文件", "lzop" to "LZOP 压缩文件", "dz" to "Dzip 压缩文件",
+        "zpaq" to "ZPAQ 压缩包", "arc" to "ARC 压缩包", "ark" to "ARK 压缩包",
+        "pak" to "PAK 资源包", "pk3" to "Quake III PAK", "pk4" to "Quake IV PAK",
+        "wad" to "WAD 游戏资源包", "bsa" to "Bethesda BSA 资源包", "ba2" to "Bethesda BA2 资源包",
+        "vpk" to "PS Vita 应用包 / Valve 资源包",
+        "gguf" to "GGUF 大模型权重", "ggml" to "GGML 大模型权重", "safetensors" to "SafeTensors 模型权重",
+        "ckpt" to "TensorFlow/PyTorch 检查点", "pt" to "PyTorch 模型", "pth" to "PyTorch 模型权重",
+        "onnx" to "ONNX 模型", "tflite" to "TensorFlow Lite 模型", "mlmodel" to "Core ML 模型",
+        "npy" to "NumPy 数组", "npz" to "NumPy 压缩数组", "pkl" to "Python 序列化数据", "joblib" to "Joblib 模型",
+        "h5" to "HDF5 数据", "hdf5" to "HDF5 数据", "pb" to "TensorFlow 冻结模型 / 协议数据",
+        "dcm" to "DICOM 医学影像", "dicom" to "DICOM 医学影像", "nii" to "NIfTI 医学影像",
+        "nii.gz" to "NIfTI 压缩医学影像", "mha" to "MetaImage 医学影像", "mhd" to "MetaImage 头文件",
+        "nrrd" to "NRRD 医学影像", "fits" to "FITS 天文数据", "fts" to "FITS 天文数据",
+        "las" to "LAS 点云数据", "laz" to "LAZ 压缩点云", "dem" to "DEM 高程数据",
+        "asc" to "ASCII 网格 / 高程数据", "hgt" to "SRTM 高程瓦片", "grib" to "GRIB 气象数据",
+        "grib2" to "GRIB2 气象数据", "zarr" to "Zarr 数组数据", "pmtiles" to "PMTiles 离线地图",
+        "osm.pbf" to "OpenStreetMap PBF 数据",
+        "pst" to "Outlook 邮件存档", "ost" to "Outlook 离线邮件", "olm" to "Outlook for Mac 邮件",
+        "nsf" to "Lotus Notes 邮件库", "mbx" to "邮箱数据文件",
+        "kdbx" to "KeePass 密码数据库", "keychain" to "macOS 钥匙串", "1pif" to "1Password 导出",
+        "opvault" to "1Password 保险库",
+        "vdi" to "VirtualBox 虚拟硬盘", "vhd" to "虚拟硬盘", "vhdx" to "虚拟硬盘 · VHDX",
+        "vmdk" to "VMware 虚拟磁盘", "qcow2" to "QEMU 虚拟磁盘", "qco" to "QEMU 虚拟磁盘",
+        "hdd" to "Parallels 虚拟硬盘", "vbox" to "VirtualBox 配置", "pvm" to "Parallels 虚拟机",
+        "rom" to "ROM 固件/游戏镜像", "uf2" to "UF2 固件", "hex" to "Intel HEX 固件",
+        "s19" to "Motorola S-record 固件", "mot" to "Motorola S-record 固件", "elf" to "ELF 可执行/固件",
+        "cap" to "网络抓包文件",
+        "ipynb" to "Jupyter Notebook", "rmd" to "R Markdown 文档", "qmd" to "Quarto 文档",
+        "rdata" to "R 数据文件", "rds" to "R 数据文件", "rda" to "R 数据文件",
+        "mat" to "MATLAB 数据文件", "dta" to "Stata 数据文件", "por" to "SPSS 便携数据",
+        "flp" to "FL Studio 工程", "als" to "Ableton Live 工程", "aup3" to "Audacity 3 工程",
+        "rpp" to "REAPER 工程", "ptx" to "Pro Tools 工程", "ptf" to "Pro Tools 会话",
+        "omf" to "OMF 音频交换工程", "aaf" to "AAF 音视频交换工程",
+        "cpr" to "Cubase 工程", "npr" to "Nuendo 工程", "band" to "GarageBand 工程",
+        "logicx" to "Logic Pro 工程", "sesx" to "Adobe Audition 会话",
+        "3mf" to "3MF 3D 打印模型", "amf" to "AMF 3D 打印模型", "ply" to "PLY 3D 模型/点云",
+        "usd" to "Universal Scene Description", "usda" to "USD 文本场景", "usdc" to "USD 二进制场景",
+        "usdz" to "USDZ AR 模型", "abc" to "Alembic 三维缓存",
+        "gcode" to "3D 打印 G-code", "gco" to "3D 打印 G-code", "ngc" to "数控 G-code",
+        "dgn" to "MicroStation 图纸", "rvt" to "Revit 工程", "rfa" to "Revit 族文件",
+        "ifc" to "IFC 建筑模型", "sat" to "ACIS 三维模型", "sldprt" to "SolidWorks 零件",
+        "sldasm" to "SolidWorks 装配体", "ipt" to "Inventor 零件", "iam" to "Inventor 装配体",
+        "catpart" to "CATIA 零件", "catproduct" to "CATIA 装配体",
+        "3dm" to "Rhino 3D 模型", "3dmbak" to "Rhino 备份模型",
+        "pkg" to "macOS 安装包", "mpkg" to "macOS 多包安装器", "xip" to "macOS 签名归档",
+        "flatpakref" to "Flatpak 引用文件", "snap" to "Snap 安装包",
+        "ttml" to "TTML 字幕", "dfxp" to "DFXP 字幕", "sbv" to "SBV 字幕", "rt" to "RealText 字幕",
+        "fodt" to "Flat ODF 文本文档", "fods" to "Flat ODF 表格", "fodp" to "Flat ODF 演示",
+        "kdb" to "Keypass/KeePass 数据库", "age" to "age 加密文件"
+    )
+
+    private fun more5Label(e: String): String? = EXT_LABEL_MORE5[e]
+
     /** 两段/三段组合后缀的完整说明，详情和列表都用这个 */
     private val COMPOUND_LABEL = mapOf(
         "tar.gz" to "TAR.GZ 压缩包", "tar.bz2" to "TAR.BZ2 压缩包", "tar.xz" to "TAR.XZ 压缩包",
@@ -742,6 +803,22 @@ object TypeDetect {
         "7z.001" to "7Z 分卷压缩包（第 1 卷）", "zip.001" to "ZIP 分卷压缩包（第 1 卷）",
         "rar.001" to "RAR 分卷压缩包（第 1 卷）", "tar.001" to "TAR 分卷压缩包（第 1 卷）",
         "tar.gz.001" to "TAR.GZ 分卷压缩包（第 1 卷）",
+        "tar.zst.001" to "TAR.ZST 分卷压缩包（第 1 卷）",
+        "tar.lz4.001" to "TAR.LZ4 分卷压缩包（第 1 卷）",
+        "tar.br.001" to "TAR.BR 分卷压缩包（第 1 卷）",
+        "iso.001" to "ISO 光盘镜像分卷（第 1 卷）",
+        "esd.001" to "Windows ESD 系统镜像分卷（第 1 卷）",
+        "wim.001" to "Windows WIM 系统镜像分卷（第 1 卷）",
+        "img.001" to "磁盘镜像分卷（第 1 卷）",
+        "bin.001" to "二进制数据分卷（第 1 卷）",
+        "dmg.001" to "macOS 磁盘映像分卷（第 1 卷）",
+        "qcow2.001" to "QEMU 虚拟磁盘分卷（第 1 卷）",
+        "vmdk.001" to "VMware 虚拟磁盘分卷（第 1 卷）",
+        "vhd.001" to "虚拟硬盘分卷（第 1 卷）",
+        "vhdx.001" to "虚拟硬盘分卷（第 1 卷）",
+        "exe.001" to "Windows 程序分卷（第 1 卷）",
+        "nii.gz" to "NIfTI 压缩医学影像",
+        "osm.pbf" to "OpenStreetMap PBF 数据",
         "d.ts" to "TypeScript 声明文件", "min.js" to "压缩版 JavaScript", "min.css" to "压缩版 CSS",
         "user.js" to "浏览器用户脚本", "user.css" to "浏览器用户样式", "schema.json" to "JSON Schema 描述文件"
     ) + (1..99).associate { "%03d".format(it) to "分卷 / 拆分文件（第 $it 卷）" } +
@@ -754,9 +831,45 @@ object TypeDetect {
         return !(m.contains("mp2t") || m.contains("mpegts") || m.contains("m2ts"))
     }
 
+
+    /** 任意第 N 卷的显示：ISO.002 也要显示“ISO 光盘镜像分卷（第 2 卷）” */
+    private fun splitVolumeLabel(name: String): String? {
+        val m = Regex("(.+)\\.(\\d{3})").matchEntire(name) ?: return null
+        val base = m.groupValues[1]
+        val index = m.groupValues[2].toIntOrNull() ?: return null
+        val inner = extOf(base)
+        if (inner.isEmpty()) return null
+        val kind = when (inner) {
+            "iso" -> "ISO 光盘镜像"
+            "esd" -> "Windows ESD 系统镜像"
+            "wim" -> "Windows WIM 系统镜像"
+            "img" -> "磁盘镜像"
+            "dmg" -> "macOS 磁盘映像"
+            "qcow2" -> "QEMU 虚拟磁盘"
+            "vmdk" -> "VMware 虚拟磁盘"
+            "vhd", "vhdx" -> "虚拟硬盘"
+            "exe" -> "Windows 程序"
+            "zip" -> "ZIP 压缩包"
+            "rar" -> "RAR 压缩包"
+            "7z" -> "7Z 压缩包"
+            "tar" -> "TAR 归档"
+            "tar.gz", "gz", "tgz" -> "TAR.GZ / GZIP 压缩包"
+            "tar.bz2", "bz2", "tbz", "tbz2" -> "TAR.BZ2 / BZIP2 压缩包"
+            "tar.xz", "xz", "txz" -> "TAR.XZ / XZ 压缩包"
+            "tar.zst", "zst", "tzst" -> "TAR.ZST / Zstandard 压缩包"
+            "tar.lz4", "lz4", "tlz4" -> "TAR.LZ4 / LZ4 压缩包"
+            "tar.br", "br", "tbr" -> "TAR.BR / Brotli 压缩包"
+            "tar.lzma", "lzma", "tlz" -> "TAR.LZMA 压缩包"
+            "tar.z", "z" -> "TAR.Z / Unix 压缩包"
+            else -> null
+        } ?: return null
+        return "${kind}分卷（第 $index 卷）"
+    }
+
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
+        splitVolumeLabel(name)?.let { return it }
         COMPOUND_LABEL[e]?.let { return it }
         if (e == "ts" && isTsCode(mime)) return "TypeScript 源码"
         EXT_LABEL[e]?.let { return it }
@@ -764,6 +877,7 @@ object TypeDetect {
         more2Label(e)?.let { return it }
         more3Label(e)?.let { return it }
         more4Label(e)?.let { return it }
+        more5Label(e)?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"

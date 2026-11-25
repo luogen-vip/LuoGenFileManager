@@ -95,7 +95,12 @@ fun itemIcon(item: FileItem): ImageVector {
         Cat.VIDEO -> Icons.Filled.Videocam
         Cat.AUDIO -> Icons.Filled.Audiotrack
         Cat.DOC -> docIcon(item.ext)
-        Cat.ARCHIVE -> if (item.ext in setOf("iso", "esd", "wim", "img", "dmg", "vhd", "vhdx", "vmdk")) Icons.Filled.Album else Icons.Filled.FolderZip
+        Cat.ARCHIVE -> {
+            val inner = item.ext.substringBeforeLast('.')
+            if (item.ext in setOf("iso", "esd", "wim", "img", "dmg", "vhd", "vhdx", "vmdk", "qcow2") ||
+                inner in setOf("iso", "esd", "wim", "img", "dmg", "vhd", "vhdx", "vmdk", "qcow2")
+            ) Icons.Filled.Album else Icons.Filled.FolderZip
+        }
         Cat.APP -> Icons.Filled.Apps
         else -> fileIcon(item.ext)
     }

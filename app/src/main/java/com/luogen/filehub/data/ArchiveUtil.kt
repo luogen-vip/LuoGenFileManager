@@ -10,16 +10,21 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
+import org.apache.commons.compress.compressors.brotli.BrotliCompressorInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorInputStream
 import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream
 import org.apache.commons.compress.compressors.z.ZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
+import io.airlift.compress.zstd.ZstdInputStream
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStream
+import java.io.RandomAccessFile
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -50,6 +55,9 @@ object ArchiveUtil {
     private val CPIO = setOf("cpio")
     private val ARLIKE = setOf("ar", "deb")
     private val LZMALIKE = setOf("lzma", "tlz")
+    private val ZSTD = setOf("zst", "tzst", "zstd")
+    private val LZ4 = setOf("lz4", "tlz4")
+    private val BROTLI = setOf("br", "tbr")
     private val ZLIKE = setOf("z")
 
     /** tar.gz / tar.bz2 / tar.xz 等两段后缀归一成底层压缩算法，方便复用解压流程 */
@@ -58,6 +66,9 @@ object ArchiveUtil {
         "tar.bz2" -> "bz2"
         "tar.xz" -> "xz"
         "tar.lzma" -> "lzma"
+        "tar.zst" -> "zst"
+        "tar.lz4" -> "lz4"
+        "tar.br" -> "br"
         "tar.z" -> "z"
         else -> e
     }
@@ -66,34 +77,42 @@ object ArchiveUtil {
     private fun effExt(file: File): String {
         val e = normalizeExt(extOf(file.name))
         if (e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE || e in GZLIKE || e in BZ2LIKE ||
-            e in XZLIKE || e in ISOLIKE || e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
+            e in XZLIKE || e in ZSTD || e in LZ4 || e in BROTLI || e in ISOLIKE ||
+            e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
         ) return e
         val m = try { TypeDetect.detectByMagic(file) } catch (_: Throwable) { null }
         return when (m) {
             "zip" -> "zip"; "rar" -> "rar"; "7z" -> "7z"; "gz" -> "gz"; "bz2" -> "bz2"; "xz" -> "xz"
+            "zst" -> "zst"; "lz4" -> "lz4"; "iso" -> "iso"
             else -> e
         }
     }
 
     fun isSupported(file: File): Boolean {
+        if (splitGroupOf(file) != null) return true
         val e = effExt(file)
         return e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE ||
-            e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ISOLIKE ||
-            e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
+            e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ZSTD || e in LZ4 || e in BROTLI ||
+            e in ISOLIKE || e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
     }
 
-    fun formatName(file: File): String = extOf(file.name).uppercase().ifEmpty { "未知" }
+    fun formatName(file: File): String {
+        val g = splitGroupOf(file)
+        if (g != null) return "${splitLabel(g)} · ${g.parts.size} 卷"
+        return extOf(file.name).uppercase().ifEmpty { "未知" }
+    }
 
     // ---------------- 列表 ----------------
 
     fun list(file: File): ArchiveResult {
+        splitGroupOf(file)?.let { return listSplit(file, it) }
         val e = effExt(file)
         return try {
             when {
                 e in ZIPLIKE -> listZip(file)
                 e in SEVENZ -> list7z(file)
                 e in TARLIKE -> listTar(file)
-                e in GZLIKE || e in BZ2LIKE || e in XZLIKE -> listCompressed(file)
+                e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ZSTD || e in LZ4 || e in BROTLI -> listCompressed(file)
                 e in RARLIKE -> listRar(file)
                 e in ISOLIKE -> listIso(file)
                 e in CPIO -> listCpio(file)
@@ -152,9 +171,10 @@ object ArchiveUtil {
         val stream = openCompressed(file, e) ?: return ArchiveResult(false, "无法打开压缩流")
         stream.use { ins ->
             // gz 里可能是 tar
-            if (e in GZLIKE || e in BZ2LIKE || e in XZLIKE) {
+            if (e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ZSTD || e in LZ4 || e in BROTLI) {
                 val name = file.name.substringBeforeLast('.')
-                if (name.endsWith(".tar", true) || e == "tgz" || e == "tbz" || e == "txz") {
+                if (name.endsWith(".tar", true) || e == "tgz" || e == "tbz" || e == "txz" ||
+                    e == "tzst" || e == "tlz4" || e == "tbr") {
                     val entries = ArrayList<ArchiveEntry>()
                     TarArchiveInputStream(ins).use { tis ->
                         var t: TarArchiveEntry? = tis.nextEntry
@@ -198,11 +218,401 @@ object ArchiveUtil {
                 "gz", "tgz" -> GzipCompressorInputStream(raw, true)
                 "bz2", "tbz", "tbz2" -> BZip2CompressorInputStream(raw, true)
                 "xz", "txz" -> XZCompressorInputStream(raw)
+                "zst", "tzst", "zstd" -> ZstdInputStream(raw)
+                "lz4", "tlz4" -> FramedLZ4CompressorInputStream(raw)
+                "br", "tbr" -> BrotliCompressorInputStream(raw)
                 else -> null
             }
         } catch (t: Throwable) {
             try { raw.close() } catch (_: Throwable) {}
             throw t
+        }
+    }
+
+    // ---------------- 分卷（.001/.002/...） ----------------
+
+    private data class SplitGroup(val parts: List<File>, val baseName: String) {
+        val first: File get() = parts.first()
+        val total: Long get() = parts.sumOf { p -> try { p.length() } catch (_: Throwable) { 0L } }
+    }
+
+    private val SPLIT_NAME = Regex("^(.+)\\.(\\d{3})$")
+
+    /** 找到同一目录里连续的 .001/.002/... 分卷；点 .002 也会回到整组分卷 */
+    private fun splitGroupOf(file: File): SplitGroup? {
+        if (!file.isFile) return null
+        val m = SPLIT_NAME.matchEntire(file.name) ?: return null
+        val base = m.groupValues[1]
+        val dir = file.parentFile ?: return null
+        val start = if (File(dir, "$base.000").isFile) 0 else 1
+        val parts = ArrayList<File>()
+        var i = start
+        while (i <= 999) {
+            val f = File(dir, "$base.${"%03d".format(i)}")
+            if (!f.isFile) break
+            parts.add(f)
+            i++
+        }
+        if (parts.size < 2) return null
+        return SplitGroup(parts, base)
+    }
+
+    private fun splitKind(g: SplitGroup): String {
+        val inner = extOf(g.baseName).lowercase()
+        if (inner.isNotEmpty()) {
+            val n = normalizeExt(inner)
+            if (n in ZIPLIKE || n in RARLIKE || n in SEVENZ || n in TARLIKE || n in GZLIKE ||
+                n in BZ2LIKE || n in XZLIKE || n in ZSTD || n in LZ4 || n in BROTLI ||
+                n in ISOLIKE || n in CPIO || n in ARLIKE || n in LZMALIKE || n in ZLIKE
+            ) return n
+            if (inner in setOf("esd", "wim", "img", "bin", "dmg", "qcow2", "vmdk", "vhd", "vhdx", "exe", "elf")) {
+                return inner
+            }
+            if (inner == "tgz" || inner == "tbz" || inner == "txz" || inner == "tzst" ||
+                inner == "tlz4" || inner == "tbr") {
+                return when (inner) {
+                    "tgz" -> "gz"; "tbz" -> "bz2"; "txz" -> "xz"
+                    "tzst" -> "zst"; "tlz4" -> "lz4"; else -> "br"
+                }
+            }
+        }
+        return magicKind(g.first) ?: "raw"
+    }
+
+    private fun magicKind(f: File): String? {
+        val b = bytesAt(f, 0, 512) ?: return null
+        fun ascii(from: Int, to: Int): String {
+            val sb = StringBuilder()
+            for (i in from until minOf(to, b.size)) {
+                if (b[i].toInt() in 32..126) sb.append(b[i].toChar())
+            }
+            return sb.toString()
+        }
+        val m0 = b.getOrNull(0)?.toInt()?.and(0xFF) ?: -1
+        val m1 = b.getOrNull(1)?.toInt()?.and(0xFF) ?: -1
+        val m2 = b.getOrNull(2)?.toInt()?.and(0xFF) ?: -1
+        val m3 = b.getOrNull(3)?.toInt()?.and(0xFF) ?: -1
+        if (m0 == 0x50 && m1 == 0x4B) return "zip"
+        if (ascii(0, 4) == "Rar!") return "rar"
+        if (m0 == 0x37 && m1 == 0x7A && m2 == 0xBC && m3 == 0xAF) return "7z"
+        if (m0 == 0x1F && m1 == 0x8B) return "gz"
+        if (ascii(0, 3) == "BZh") return "bz2"
+        if (m0 == 0xFD && m1 == 0x37 && m2 == 0x7A && m3 == 0x58 && b.getOrNull(4)?.toInt()?.and(0xFF) == 0x5A) return "xz"
+        if (m0 == 0x28 && m1 == 0xB5 && m2 == 0x2F && m3 == 0xFD) return "zst"
+        if (m0 == 0x04 && m1 == 0x22 && m2 == 0x4D && m3 == 0x18) return "lz4"
+        if (b.size > 262 && ascii(257, 262) == "ustar") return "tar"
+        if (ascii(0, 5) == "MSWIM" || ascii(0, 4) == "MSCW" || ascii(0, 4) == "WLPW") return "wim"
+        if (ascii(0, 3) == "QFI") return "qcow2"
+        if (ascii(0, 4) == "KDMV" || ascii(0, 4) == "COWD") return "vmdk"
+        if (m0 == 0x7F && ascii(1, 4) == "ELF") return "elf"
+        if (m0 == 0x4D && m1 == 0x5A) return "exe"
+        val iso = bytesAt(f, 32769, 5)
+        if (iso != null && iso.size >= 5) {
+            val s = iso.map { it.toInt().toChar() }.joinToString("")
+            if (s == "CD001") return "iso"
+        }
+        return null
+    }
+
+    private fun bytesAt(f: File, off: Long, len: Int): ByteArray? {
+        return try {
+            RandomAccessFile(f, "r").use { raf ->
+                raf.seek(off)
+                val out = ByteArray(len)
+                val n = raf.read(out)
+                if (n <= 0) null else out.copyOf(n)
+            }
+        } catch (_: Throwable) { null }
+    }
+
+    private fun splitStreaming(kind: String) = kind in TARLIKE || kind in GZLIKE || kind in BZ2LIKE ||
+        kind in XZLIKE || kind in ZSTD || kind in LZ4 || kind in BROTLI
+
+    private fun splitRandom(kind: String) = kind in ZIPLIKE || kind in RARLIKE || kind in SEVENZ || kind in ISOLIKE
+
+    private fun splitInnerName(g: SplitGroup, kind: String): String {
+        val n = g.baseName
+        if (kind in TARLIKE) return n
+        for (s in listOf(".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst", ".tar.lz4", ".tar.br")) {
+            if (n.endsWith(s, true)) return n.dropLast(s.length) + ".tar"
+        }
+        return when {
+            n.endsWith(".tgz", true) || n.endsWith(".tbz", true) || n.endsWith(".tbz2", true) ||
+                n.endsWith(".txz", true) || n.endsWith(".tzst", true) || n.endsWith(".tlz4", true) ||
+                n.endsWith(".tbr", true) -> n.substringBeforeLast('.') + ".tar"
+            else -> n.substringBeforeLast('.', n)
+        }.ifEmpty { n }
+    }
+
+    private fun splitLabel(g: SplitGroup): String {
+        val kind = splitKind(g)
+        val ext = extOf(g.baseName).uppercase()
+        return when {
+            kind == "iso" -> "ISO 光盘镜像分卷"
+            kind == "esd" -> "Windows ESD 系统镜像分卷"
+            kind == "wim" -> "Windows WIM/ESD 系统镜像分卷"
+            kind == "zip" -> "ZIP 压缩包分卷"
+            kind == "rar" -> "RAR 压缩包分卷"
+            kind == "7z" -> "7Z 压缩包分卷"
+            kind == "tar" -> "TAR 归档分卷"
+            kind == "gz" -> if (ext == "TGZ" || ext == "TAR.GZ") "TAR.GZ 压缩包分卷" else "GZIP 压缩包分卷"
+            kind == "bz2" -> if (ext == "TBZ" || ext == "TBZ2" || ext == "TAR.BZ2") "TAR.BZ2 压缩包分卷" else "BZIP2 压缩包分卷"
+            kind == "xz" -> if (ext == "TXZ" || ext == "TAR.XZ") "TAR.XZ 压缩包分卷" else "XZ 压缩包分卷"
+            kind == "zst" -> if (ext == "TAR.ZST") "TAR.ZST 压缩包分卷" else "Zstandard 压缩包分卷"
+            kind == "lz4" -> if (ext == "TAR.LZ4") "TAR.LZ4 压缩包分卷" else "LZ4 压缩包分卷"
+            kind == "br" -> if (ext == "TAR.BR") "TAR.BR 压缩包分卷" else "Brotli 压缩包分卷"
+            kind == "img" -> "磁盘镜像分卷"
+            kind == "qcow2" -> "QEMU 虚拟磁盘分卷"
+            kind == "vmdk" -> "VMware 虚拟磁盘分卷"
+            kind == "vhd" || kind == "vhdx" -> "虚拟硬盘分卷"
+            kind == "dmg" -> "macOS 磁盘映像分卷"
+            kind == "exe" -> "Windows 程序分卷"
+            kind == "elf" -> "Linux 可执行文件分卷"
+            kind == "bin" -> "二进制数据分卷"
+            else -> "分卷 / 拆分文件"
+        }
+    }
+
+    private fun splitOutputName(g: SplitGroup, kind: String): String {
+        val base = g.baseName
+        if (extOf(base).isNotEmpty()) return base
+        val suffix = when (kind) {
+            "iso" -> ".iso"; "esd" -> ".esd"; "wim" -> ".wim"; "img" -> ".img"
+            "qcow2" -> ".qcow2"; "vmdk" -> ".vmdk"; "vhd" -> ".vhd"; "vhdx" -> ".vhdx"
+            "dmg" -> ".dmg"; "exe" -> ".exe"; "elf" -> ""; else -> ".bin"
+        }
+        return base + suffix
+    }
+
+    private fun uniqueOutput(dir: File, name: String): File {
+        var out = File(dir, name)
+        if (!out.exists()) return out
+        val dot = name.lastIndexOf('.')
+        val stem = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ""
+        var i = 1
+        while (out.exists()) {
+            out = File(dir, "$stem ($i)$ext")
+            i++
+        }
+        return out
+    }
+
+    private fun hasEnoughSpace(dir: File, need: Long): Boolean {
+        return try { dir.usableSpace > need + 8L * 1024 * 1024 } catch (_: Throwable) { true }
+    }
+
+    private fun tempExt(g: SplitGroup, kind: String): String {
+        val baseExt = extOf(g.baseName)
+        return when (kind) {
+            "zip" -> "zip"; "rar" -> "rar"; "7z" -> "7z"; "iso" -> "iso"
+            else -> if (baseExt.isNotEmpty()) baseExt else kind
+        }
+    }
+
+    private fun mergeGroupTo(
+        g: SplitGroup, out: File, onProgress: (Long, Long, String) -> Unit
+    ) {
+        val total = g.total
+        var done = 0L
+        try {
+            FileOutputStream(out).use { fos ->
+                val buf = ByteArray(128 * 1024)
+                for (p in g.parts) {
+                    FileInputStream(p).use { ins ->
+                        while (true) {
+                            val r = ins.read(buf)
+                            if (r <= 0) break
+                            fos.write(buf, 0, r)
+                            done += r
+                            onProgress(done, total, p.name)
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            try { out.delete() } catch (_: Throwable) {}
+            throw t
+        }
+    }
+
+    private fun mergeGroupTemp(
+        g: SplitGroup, kind: String,
+        onProgress: (Long, Long, String) -> Unit = { _, _, _ -> }
+    ): File {
+        val dir = g.first.parentFile ?: throw IOException("找不到分卷所在目录")
+        if (!hasEnoughSpace(dir, g.total)) throw IOException("空间不足：合并这组分卷需要约 ${g.total / 1024 / 1024} MB 临时空间")
+        val tmp = File(dir, ".lgfm_split_${System.nanoTime()}.${tempExt(g, kind)}")
+        mergeGroupTo(g, tmp, onProgress)
+        return tmp
+    }
+
+    private fun listSplit(file: File, g: SplitGroup): ArchiveResult {
+        val kind = splitKind(g)
+        return try {
+            when {
+                splitStreaming(kind) -> listSplitStream(g, kind)
+                splitRandom(kind) -> {
+                    val tmp = mergeGroupTemp(g, kind)
+                    try { list(tmp) } finally { try { tmp.delete() } catch (_: Throwable) {} }
+                }
+                else -> ArchiveResult(
+                    true,
+                    entries = listOf(ArchiveEntry(splitOutputName(g, kind), g.total, false)),
+                    count = 1,
+                    message = "这是 ${splitLabel(g)}，共 ${g.parts.size} 卷；解压时会自动合并"
+                )
+            }
+        } catch (t: Throwable) {
+            ArchiveResult(false, "读取分卷失败：${t.message ?: t.javaClass.simpleName}")
+        }
+    }
+
+    private fun openSplitStream(g: SplitGroup): InputStream = BufferedInputStream(VolumeInputStream(g.parts))
+
+    private fun wrapSplitStream(raw: InputStream, kind: String): InputStream {
+        val ins = when (kind) {
+            "gz" -> GzipCompressorInputStream(raw, true)
+            "bz2" -> BZip2CompressorInputStream(raw, true)
+            "xz" -> XZCompressorInputStream(raw)
+            "zst" -> ZstdInputStream(raw)
+            "lz4" -> FramedLZ4CompressorInputStream(raw)
+            "br" -> BrotliCompressorInputStream(raw)
+            else -> raw
+        }
+        return ins
+    }
+
+    private fun listSplitStream(g: SplitGroup, kind: String): ArchiveResult {
+        val inner = splitInnerName(g, kind)
+        val ins = wrapSplitStream(openSplitStream(g), kind)
+        val isTar = kind in TARLIKE || inner.endsWith(".tar", true)
+        if (isTar) {
+            val entries = ArrayList<ArchiveEntry>()
+            ins.use { stream ->
+                TarArchiveInputStream(stream).use { tis ->
+                    var t: TarArchiveEntry? = tis.nextEntry
+                    while (t != null) {
+                        entries.add(ArchiveEntry(t.name, t.size.coerceAtLeast(0), t.isDirectory))
+                        t = tis.nextEntry
+                    }
+                }
+            }
+            return ArchiveResult(true, entries = entries, count = entries.size)
+        }
+        ins.close()
+        return ArchiveResult(
+            true,
+            entries = listOf(ArchiveEntry(inner, g.total, false)),
+            count = 1,
+            message = "这是 ${splitLabel(g)}，共 ${g.parts.size} 卷；解压时会自动合并"
+        )
+    }
+
+    private fun extractSplit(
+        file: File, g: SplitGroup, destDir: File,
+        onProgress: (Long, Long, String) -> Unit
+    ): ArchiveResult {
+        val kind = splitKind(g)
+        return try {
+            if (!destDir.exists()) destDir.mkdirs()
+            when {
+                splitRandom(kind) -> {
+                    val tmp = mergeGroupTemp(g, kind, onProgress)
+                    try { extract(tmp, destDir, onProgress = onProgress) }
+                    finally { try { tmp.delete() } catch (_: Throwable) {} }
+                }
+                splitStreaming(kind) -> {
+                    val n = extractSplitStream(g, kind, destDir, onProgress)
+                    ArchiveResult(true, "分卷解压完成，共 $n 个文件", count = n)
+                }
+                else -> {
+                    val out = uniqueOutput(destDir, splitOutputName(g, kind))
+                    if (!hasEnoughSpace(destDir, g.total)) {
+                        return ArchiveResult(false, "空间不足：合并这组分卷还需要约 ${g.total / 1024 / 1024} MB")
+                    }
+                    mergeGroupTo(g, out, onProgress)
+                    ArchiveResult(
+                        true,
+                        "分卷合并完成：${out.name}（${splitLabel(g)}）",
+                        count = 1
+                    )
+                }
+            }
+        } catch (t: Throwable) {
+            ArchiveResult(false, "分卷处理失败：${t.message ?: t.javaClass.simpleName}")
+        }
+    }
+
+    private fun extractSplitStream(
+        g: SplitGroup, kind: String, dest: File,
+        onProgress: (Long, Long, String) -> Unit
+    ): Int {
+        val inner = splitInnerName(g, kind)
+        val ins = wrapSplitStream(openSplitStream(g), kind)
+        val total = g.total
+        val done = LongArray(1)
+        if (kind in TARLIKE || inner.endsWith(".tar", true)) {
+            return extractTar(ins, dest, total, done, onProgress)
+        }
+        ins.use { stream ->
+            val target = safeTarget(dest, inner)
+            target.parentFile?.mkdirs()
+            FileOutputStream(target).use { fos ->
+                val buf = ByteArray(64 * 1024)
+                var r = stream.read(buf)
+                while (r > 0) {
+                    fos.write(buf, 0, r)
+                    done[0] += r
+                    onProgress(done[0], total, inner)
+                    r = stream.read(buf)
+                }
+            }
+        }
+        return 1
+    }
+
+    private class VolumeInputStream(private val parts: List<File>) : InputStream() {
+        private var idx = 0
+        private var cur: InputStream? = null
+        private fun ensure(): InputStream? {
+            while (true) {
+                val c = cur
+                if (c != null) return c
+                if (idx >= parts.size) return null
+                cur = FileInputStream(parts[idx++])
+            }
+        }
+        override fun read(): Int {
+            val ins = ensure() ?: return -1
+            val v = try { ins.read() } catch (_: Throwable) { -1 }
+            if (v < 0) {
+                try { ins.close() } catch (_: Throwable) {}
+                cur = null
+                return read()
+            }
+            return v
+        }
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (len == 0) return 0
+            var ins = ensure() ?: return -1
+            var r = try { ins.read(b, off, len) } catch (_: Throwable) { -1 }
+            while (r < 0 && idx < parts.size) {
+                try { ins.close() } catch (_: Throwable) {}
+                cur = null
+                ins = ensure() ?: return -1
+                r = ins.read(b, off, len)
+            }
+            if (r < 0) {
+                try { ins.close() } catch (_: Throwable) {}
+                cur = null
+            }
+            return r
+        }
+        override fun close() {
+            try { cur?.close() } catch (_: Throwable) {}
+            cur = null
+            idx = parts.size
         }
     }
 
@@ -214,11 +624,13 @@ object ArchiveUtil {
         skipBroken: Boolean = true,
         onProgress: (doneBytes: Long, totalBytes: Long, current: String) -> Unit = { _, _, _ -> }
     ): ArchiveResult {
+        splitGroupOf(file)?.let { return extractSplit(file, it, destDir, onProgress) }
         val e = effExt(file)
         if (!destDir.exists()) destDir.mkdirs()
         val total = when {
             e in ZIPLIKE || e in SEVENZ || e in TARLIKE || e in RARLIKE || e in ISOLIKE || e in GZLIKE ||
-                e in BZ2LIKE || e in XZLIKE || e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE -> estimateTotal(file)
+                e in BZ2LIKE || e in XZLIKE || e in ZSTD || e in LZ4 || e in BROTLI ||
+                e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE -> estimateTotal(file)
             else -> file.length()
         }
         val done = LongArray(1)
@@ -228,7 +640,8 @@ object ArchiveUtil {
                 e in SEVENZ -> extract7z(file, destDir, total, done, onProgress)
                 e in TARLIKE -> extractTar(FileInputStream(file), destDir, total, done, onProgress)
                 e in GZLIKE -> extractGz(file, destDir, total, done, onProgress)
-                e in BZ2LIKE || e in XZLIKE -> extractSimpleCompressed(file, destDir, e, total, done, onProgress)
+                e in BZ2LIKE || e in XZLIKE || e in ZSTD || e in LZ4 || e in BROTLI ->
+                    extractSimpleCompressed(file, destDir, e, total, done, onProgress)
                 e in RARLIKE -> extractRar(file, destDir, total, done, onProgress)
                 e in ISOLIKE -> extractIso(file, destDir, total, done, onProgress)
                 e in CPIO -> extractCpio(file, destDir, total, done, onProgress)
@@ -582,7 +995,8 @@ object ArchiveUtil {
         onProgress: (Long, Long, String) -> Unit
     ): Int {
         val innerName = file.name.substringBeforeLast('.')
-        val isTar = e == "tbz" || e == "txz" || innerName.endsWith(".tar", true)
+        val isTar = e == "tbz" || e == "txz" || e == "tzst" || e == "tlz4" || e == "tbr" ||
+            innerName.endsWith(".tar", true)
         val ins = openCompressed(file, e) ?: return 0
         if (isTar) return extractTar(ins, dest, total, done, onProgress)
         ins.use { stream ->

@@ -65,6 +65,10 @@ fun Long.toDayTitle(): String {
 private val COMPOUND_EXT = setOf(
     "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lz4", "tar.lzma", "tar.lz", "tar.z", "tar.br",
     "7z.001", "zip.001", "rar.001", "tar.001", "tar.gz.001",
+    "tar.zst.001", "tar.lz4.001", "tar.br.001",
+    "iso.001", "esd.001", "wim.001", "img.001", "bin.001", "dmg.001",
+    "qcow2.001", "vmdk.001", "vhd.001", "vhdx.001", "exe.001",
+    "nii.gz", "osm.pbf",
     "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json"
 )
 

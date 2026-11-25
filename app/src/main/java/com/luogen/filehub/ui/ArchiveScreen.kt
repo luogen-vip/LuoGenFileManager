@@ -48,6 +48,7 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
     var filter by remember(path) { mutableStateOf(AppState.archiveFilter(path)) }
     var pendingEntry by remember { mutableStateOf<ArchiveEntry?>(null) }
     var doneDir by remember { mutableStateOf<String?>(null) }
+    var doneMsg by remember { mutableStateOf("") }
 
     fun clearFilter() {
         filter = ""
@@ -84,6 +85,7 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
             prog = null
             if (r.ok) {
                 doneDir = dest
+                doneMsg = r.message
             } else {
                 toast = r.message
             }
@@ -101,6 +103,7 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
             prog = null
             if (r.ok) {
                 doneDir = base.absolutePath
+                doneMsg = r.message
                 toast = "已解压：${entry.name}"
             } else {
                 toast = r.message
@@ -278,7 +281,7 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
             onDismissRequest = { doneDir = null },
             shape = RoundedCornerShape(22.dp),
             title = { Text("解压完成") },
-            text = { Text("已解压到：\n$dir", fontSize = 13.sp) },
+            text = { Text(if (doneMsg.isNotBlank()) "$doneMsg\n\n已解压到：\n$dir" else "已解压到：\n$dir", fontSize = 13.sp) },
             confirmButton = {
                 TextButton(onClick = {
                     doneDir = null

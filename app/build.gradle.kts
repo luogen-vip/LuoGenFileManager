@@ -12,8 +12,8 @@ android {
         applicationId = "com.luogen.filehub"
         minSdk = 24
         targetSdk = 34
-        versionCode = 23
-        versionName = "1.5.7"
+        versionCode = 24
+        versionName = "1.5.8"
     }
 
     buildTypes {
@@ -58,6 +58,10 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.4.1")
 
     implementation("org.apache.commons:commons-compress:1.26.2")
+    // tar.zst / tar.lz4 / tar.br 真正解压所需；不做假解压
+    // Android 版 zstd 纯 Java 解码（已替换 sun.misc.Unsafe 静态常量，适配安卓）
+    implementation(files("libs/aircompressor-android.jar"))
+    implementation("org.brotli:dec:0.1.2")
     implementation("org.tukaani:xz:1.9")
     implementation("com.github.junrar:junrar:7.5.5")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
