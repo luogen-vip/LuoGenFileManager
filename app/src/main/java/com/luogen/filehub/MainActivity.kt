@@ -35,6 +35,9 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("open_ftp", false) == true) AppState.ftpOpenRequested = true
         super.onCreate(savedInstanceState)
         Prefs.init(this)
+        // 进程被清理后重新打开：导航栈回到上次的位置，而不是永远回首页
+        try { AppState.restoreSearchFilters() } catch (_: Throwable) {}
+        try { AppState.nav.restore(Prefs.navRoutes()) } catch (_: Throwable) {}
         // 进程被系统回收后再打开：把上次队列接回来；上次正在播就继续播
         try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         try {
@@ -47,6 +50,14 @@ class MainActivity : ComponentActivity() {
                 AppRoot()
             }
         }
+    }
+
+    override fun onPause() {
+        try {
+            Prefs.saveNavRoutes(AppState.nav.routes())
+            Prefs.flush()
+        } catch (_: Throwable) {}
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -205,6 +216,22 @@ class NavStack {
         if (stack.isNotEmpty()) stack.removeAt(stack.size - 1)
         stack.add(s)
     }
+
+    /** 把整个导航栈编码成字符串，进程被清理后还能原样恢复 */
+    fun routes(): List<String> = stack.map { it.route() }
+
+    fun restore(routes: List<String>) {
+        if (routes.isEmpty()) return
+        val out = ArrayList<Screen>()
+        routes.forEach { route ->
+            val s = routeToScreen(route) ?: return@forEach
+            if (s !is Screen.Home && out.none { it === s }) out.add(s)
+        }
+        if (out.isEmpty()) return
+        stack.clear()
+        stack.add(Screen.Home)
+        out.take(23).forEach { stack.add(it) }
+    }
 }
 
 sealed class Screen {
@@ -224,6 +251,69 @@ sealed class Screen {
     object Vault : Screen()
     object Ftp : Screen()
     data class VaultViewer(val cachedPath: String, val name: String) : Screen()
+}
+
+private fun enc(s: String): String = try { android.net.Uri.encode(s) } catch (_: Throwable) { s }
+private fun dec(s: String): String = try { android.net.Uri.decode(s) } catch (_: Throwable) { s }
+
+private fun Screen.route(): String = when (this) {
+    is Screen.Home -> "home"
+    is Screen.CatList -> "cat|" + cat.name
+    is Screen.Browse -> "browse|" + id + "|" + enc(dir)
+    is Screen.ImageView -> "image|" + enc(paths.getOrNull(start) ?: paths.firstOrNull().orEmpty())
+    is Screen.VideoView -> "video|" + enc(paths.getOrNull(start) ?: paths.firstOrNull().orEmpty())
+    is Screen.AudioView -> "audio|" + start
+    is Screen.TextView -> "text|" + enc(path)
+    is Screen.PdfView -> "pdf|" + enc(path)
+    is Screen.ArchiveView -> "archive|" + enc(path)
+    is Screen.GlobalSearch -> "search|" + enc(query)
+    is Screen.CleanCat -> "clean|" + cat.name
+    is Screen.Vault -> "vault"
+    is Screen.Ftp -> "ftp"
+    is Screen.VaultViewer -> "vv|" + enc(cachedPath) + "|" + enc(name)
+}
+
+private fun catByName(name: String): com.luogen.filehub.model.Cat? =
+    com.luogen.filehub.model.Cat.values().firstOrNull { it.name == name }
+
+private fun routeToScreen(route: String): Screen? {
+    val p = route.split("|")
+    fun path(i: Int): String? {
+        if (i >= p.size) return null
+        val v = dec(p[i])
+        return v.ifEmpty { null }
+    }
+    return when (p.firstOrNull()) {
+        "home" -> Screen.Home
+        "cat" -> catByName(p.getOrNull(1) ?: "")?.let { Screen.CatList(it) }
+        "browse" -> {
+            val d = path(2) ?: return null
+            val f = File(d)
+            if (f.exists() && f.isDirectory) Screen.Browse(d, p.getOrNull(1)?.toLongOrNull() ?: (d.hashCode().toLong())) else null
+        }
+        "image" -> path(1)?.let { File(it) }?.takeIf { it.exists() && it.isFile }?.let {
+            Screen.ImageView(listOf(it.absolutePath), 0)
+        }
+        "video" -> path(1)?.let { File(it) }?.takeIf { it.exists() && it.isFile }?.let {
+            Screen.VideoView(listOf(it.absolutePath), 0)
+        }
+        "audio" -> {
+            val hub = com.luogen.filehub.data.AudioHub
+            if (hub.playlist.isEmpty()) null else Screen.AudioView(hub.playlist, hub.index.coerceIn(0, hub.playlist.size - 1))
+        }
+        "text" -> path(1)?.let { File(it) }?.takeIf { it.exists() && it.isFile }?.let { Screen.TextView(it.absolutePath) }
+        "pdf" -> path(1)?.let { File(it) }?.takeIf { it.exists() && it.isFile }?.let { Screen.PdfView(it.absolutePath) }
+        "archive" -> path(1)?.let { File(it) }?.takeIf { it.exists() && it.isFile }?.let { Screen.ArchiveView(it.absolutePath) }
+        "search" -> path(1)?.let { Screen.GlobalSearch(it) }
+        "clean" -> catByName(p.getOrNull(1) ?: "")?.let { Screen.CleanCat(it) }
+        "vault" -> Screen.Vault
+        "ftp" -> Screen.Ftp
+        "vv" -> {
+            val c = path(1) ?: return null
+            if (File(c).exists()) Screen.VaultViewer(c, dec(p.getOrNull(2) ?: "")) else null
+        }
+        else -> null
+    }
 }
 
 /** 统一的“打开文件”入口：按类型跳对应查看器 */

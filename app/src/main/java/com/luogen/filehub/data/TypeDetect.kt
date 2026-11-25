@@ -57,7 +57,20 @@ object TypeDetect {
         "xps", "oxps", "one", "onetoc2", "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr",
         "cb7", "djvu", "lit", "tex", "ltx", "bib", "typ", "cls", "sty", "ris", "enw", "nbib",
         "sla", "scd", "kepub", "ibooks", "pdb", "xmind", "mmd", "puml", "drawio", "mpp", "gantt", "mermaid",
-        "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json"
+        "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json",
+        "xlsb", "dotx", "potx", "xltx", "xltm", "thmx", "odc", "odb", "odf", "odg", "odi", "odm",
+        "ott", "ots", "otp", "otg", "otm", "kfx", "prc", "ceb", "xeb", "lrf", "rb", "acsm",
+        "enex", "xoj", "joplin", "note", "gnote", "zim", "tldr", "man", "me", "diz",
+        "abw", "gnumeric", "sxw", "sxc", "sxi", "sxd", "stw", "stc", "sti", "sdd", "sdp", "vor",
+        "hpp", "hh", "hxx", "cxx", "cc", "c++", "ipp", "inl", "tpp", "txx", "nasm",
+        "wat", "ll", "cu", "cuh", "hip", "sol", "move", "cairo", "vy", "rego",
+        "tf", "tfvars", "hcl", "nix", "dhall", "jsonnet", "libsonnet", "graphqls",
+        "ps1xml", "clixml", "http", "rest", "gyp", "gypi", "gn", "gni", "bzl", "bazel", "star",
+        "mak", "ninja", "sbt", "pom", "ivy", "sln", "csproj", "fsproj", "vbproj", "vcxproj",
+        "vcproj", "pbxproj", "xcconfig", "entitlements", "podspec", "gemspec", "nuspec",
+        "cabal", "opam", "rockspec", "spec", "sum", "rdf", "ttl", "nt", "nq", "trig", "trix",
+        "jsonld", "topojson", "kml", "gpx", "tcx", "gml", "osm", "prj", "cpg",
+        "qgs", "mif", "vhdr", "vmrk", "lay", "obs", "rinex", "sp3", "clk"
 
     )
 
@@ -74,6 +87,7 @@ object TypeDetect {
         "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lz4", "tar.lzma", "tar.lz", "tar.z", "tar.br",
         "7z.001", "zip.001", "rar.001", "tar.001", "tar.gz.001",
         "tar.zst.001", "tar.lz4.001", "tar.br.001",
+        "tar.gz.001", "tar.bz2.001", "tar.xz.001", "tar.lzma.001", "tar.lz.001", "tar.z.001",
         "iso.001", "esd.001", "wim.001", "img.001", "bin.001", "dmg.001",
         "qcow2.001", "vmdk.001", "vhd.001", "vhdx.001", "exe.001"
 
@@ -91,7 +105,17 @@ object TypeDetect {
         "vagrantfile", "jenkinsfile", "htaccess", "htpasswd", "repo", "service", "timer", "socket",
         "sol", "move", "cairo", "nim", "zig", "ex", "exs", "erl", "hrl", "clj", "cljs", "hs", "lhs",
         "ml", "mli", "fsx", "pas", "pp", "dpr", "bas", "cob", "ada", "adb", "ads", "forth", "f", "for",
-        "tcl", "awk", "sed", "smali", "smi"
+        "tcl", "awk", "sed", "smali", "smi",
+        "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json",
+        "hpp", "hh", "hxx", "cxx", "cc", "c++", "ipp", "inl", "tpp", "txx", "nasm",
+        "wat", "ll", "cu", "cuh", "hip", "sol", "move", "cairo", "vy", "rego",
+        "tf", "tfvars", "hcl", "nix", "dhall", "jsonnet", "libsonnet", "graphqls",
+        "ps1xml", "clixml", "http", "rest", "gyp", "gypi", "gn", "gni", "bzl", "bazel", "star",
+        "mak", "ninja", "sbt", "pom", "ivy", "sln", "csproj", "fsproj", "vbproj", "vcxproj",
+        "vcproj", "pbxproj", "xcconfig", "entitlements", "podspec", "gemspec", "nuspec",
+        "cabal", "opam", "rockspec", "spec", "sum", "rdf", "ttl", "nt", "nq", "trig", "trix",
+        "jsonld", "topojson", "kml", "gpx", "tcx", "gml", "osm", "prj", "cpg",
+        "qgs", "mif", "vhdr", "vmrk", "lay", "obs", "rinex", "sp3", "clk"
     )
 
     fun catOf(fileName: String, mime: String = "", isDir: Boolean = false): Cat {
@@ -795,6 +819,136 @@ object TypeDetect {
 
     private fun more5Label(e: String): String? = EXT_LABEL_MORE5[e]
 
+    private val EXT_LABEL_MORE6 = mapOf(
+        // —— 编程 / 工程 / 构建 ——
+        "hpp" to "C++ 头文件", "hh" to "C++ 头文件", "hxx" to "C++ 头文件", "cxx" to "C++ 源文件",
+        "cc" to "C/C++ 源文件", "c++" to "C++ 源文件", "ipp" to "C++ 内联实现", "inl" to "C++ 内联文件",
+        "tpp" to "C++ 模板实现", "txx" to "C++ 模板源文件", "nasm" to "NASM 汇编源码",
+        "wat" to "WebAssembly 文本格式", "ll" to "LLVM IR 中间代码",
+        "cu" to "CUDA 源码", "cuh" to "CUDA 头文件", "hip" to "HIP 异构计算源码",
+        "sol" to "Solidity 智能合约", "move" to "Move 智能合约", "cairo" to "Cairo 智能合约",
+        "vy" to "Vyper 智能合约", "rego" to "OPA Rego 策略", "tf" to "Terraform 配置",
+        "tfvars" to "Terraform 变量", "tfstate" to "Terraform 状态", "tfplan" to "Terraform 计划",
+        "hcl" to "HCL 配置", "nix" to "Nix 表达式", "dhall" to "Dhall 配置",
+        "jsonnet" to "Jsonnet 配置", "libsonnet" to "Jsonnet 库", "graphqls" to "GraphQL Schema",
+        "ps1xml" to "PowerShell 类型扩展", "clixml" to "PowerShell CLI XML", "http" to "HTTP 请求文件",
+        "rest" to "REST 请求文件", "gyp" to "GYP 构建配置", "gypi" to "GYP 包含配置",
+        "gn" to "GN 构建配置", "gni" to "GN 包含配置", "bzl" to "Bazel Starlark 脚本",
+        "bazel" to "Bazel 构建文件", "star" to "Starlark 脚本", "mak" to "Make 构建文件",
+        "ninja" to "Ninja 构建文件", "sbt" to "SBT 构建文件", "pom" to "Maven POM 配置",
+        "ivy" to "Ivy 依赖配置", "sln" to "Visual Studio 解决方案", "csproj" to "C# 项目文件",
+        "fsproj" to "F# 项目文件", "vbproj" to "VB 项目文件", "vcxproj" to "Visual C++ 项目文件",
+        "vcproj" to "Visual C++ 旧版项目", "pbxproj" to "Xcode 工程文件", "xcconfig" to "Xcode 构建配置",
+        "entitlements" to "Apple 授权配置", "podspec" to "CocoaPods 描述文件",
+        "gemspec" to "RubyGem 描述文件", "nuspec" to "NuGet 包描述", "cabal" to "Haskell Cabal 配置",
+        "opam" to "OCaml OPAM 配置", "rockspec" to "LuaRocks 描述文件", "spec" to "软件包规范文件",
+        "sum" to "校验和清单",
+
+        // —— 文档 / 电子书 / 笔记 ——
+        "xlsb" to "Excel 二进制工作簿", "dotx" to "Word 模板", "potx" to "PowerPoint 模板",
+        "xltx" to "Excel 模板", "xltm" to "Excel 宏模板", "thmx" to "Office 主题",
+        "odc" to "OpenDocument 图表", "odb" to "OpenDocument 数据库", "odf" to "OpenDocument 公式",
+        "odg" to "OpenDocument 图形", "odi" to "OpenDocument 图像", "odm" to "OpenDocument 主文档",
+        "ott" to "OpenDocument 文本模板", "ots" to "OpenDocument 表格模板",
+        "otp" to "OpenDocument 演示模板", "otg" to "OpenDocument 图形模板",
+        "otm" to "OpenDocument 宏模板", "kfx" to "Kindle KFX 电子书", "prc" to "Palm/PRC 电子书",
+        "ceb" to "Apabi 电子书", "xeb" to "Apabi 电子书", "lrf" to "索尼 LRF 电子书",
+        "rb" to "Rocket eBook 电子书", "acsm" to "Adobe ACSM 授权文件",
+        "enex" to "Evernote 导出笔记", "xoj" to "Xournal 手写笔记", "joplin" to "Joplin 笔记",
+        "note" to "笔记文件", "gnote" to "Gnote 笔记", "zim" to "ZIM 离线维基",
+        "tldr" to "tldr 帮助文档", "man" to "Man 手册", "me" to "README/说明文件",
+        "diz" to "说明文件", "abw" to "AbiWord 文档", "gnumeric" to "Gnumeric 表格",
+        "sxw" to "StarOffice 文档", "sxc" to "StarOffice 表格", "sxi" to "StarOffice 演示",
+        "sxd" to "StarOffice 图形", "stw" to "StarOffice 文档模板", "stc" to "StarOffice 表格模板",
+        "sti" to "StarOffice 演示模板", "sdd" to "StarOffice 演示", "sdp" to "StarOffice 演示",
+        "vor" to "StarOffice 公式",
+
+        // —— 数据 / 数据库 / 地理 ——
+        "feather" to "Apache Arrow Feather 数据", "hdt" to "HDT 压缩 RDF 数据",
+        "rdf" to "RDF 语义数据", "ttl" to "Turtle RDF 数据", "nt" to "N-Triples 数据",
+        "nq" to "N-Quads 数据", "trig" to "TriG 数据", "trix" to "TriX 数据",
+        "jsonld" to "JSON-LD 数据", "topojson" to "TopoJSON 地理数据", "kml" to "KML 地理标记",
+        "kmz" to "KMZ 压缩地理标记", "gpx" to "GPX 轨迹", "tcx" to "TCX 运动轨迹",
+        "fit" to "FIT 运动数据", "sbf" to "SBF 原始导航数据", "ubx" to "u-blox 原始导航数据",
+        "rtcm" to "RTCM 差分定位数据", "rinex" to "RINEX 卫星观测数据", "obs" to "GNSS 观测数据",
+        "sp3" to "SP3 精密星历", "clk" to "CLK 精密钟差", "nav" to "GNSS 导航电文",
+        "shp" to "Shapefile 矢量数据", "shx" to "Shapefile 索引", "prj" to "GIS 投影定义",
+        "cpg" to "Shapefile 编码定义", "qgz" to "QGIS 压缩工程", "qgs" to "QGIS 工程",
+        "mxd" to "ArcMap 地图文档", "aprx" to "ArcGIS Pro 工程", "lyr" to "ArcGIS 图层",
+        "lyrx" to "ArcGIS Pro 图层", "tab" to "MapInfo 表", "mif" to "MapInfo 交换格式",
+        "gml" to "GML 地理标记", "osm" to "OpenStreetMap 数据",
+        "sqlite3" to "SQLite 数据库", "db3" to "SQLite 数据库", "frm" to "MySQL 表结构",
+        "ibd" to "MySQL InnoDB 表空间", "myd" to "MySQL MyISAM 数据", "myi" to "MySQL MyISAM 索引",
+        "ldf" to "SQL Server 日志", "ndf" to "SQL Server 辅助数据", "dmp" to "数据库导出 / 内存转储",
+        "realm" to "Realm 数据库", "duckdb" to "DuckDB 数据库", "lmdb" to "LMDB 数据库",
+        "mdbx" to "MDBX 数据库", "leveldb" to "LevelDB 数据",
+        "sav" to "SPSS 数据", "zsav" to "SPSS 压缩数据", "sas7bdat" to "SAS 数据",
+        "sas7bcat" to "SAS 目录", "xpt" to "SAS XPORT 数据", "jmp" to "JMP 数据",
+        "nc" to "NetCDF 科学数据", "nc4" to "NetCDF-4 数据", "cdf" to "CDF 科学数据",
+        "he5" to "HDF5 科学数据", "bufr" to "BUFR 气象数据", "grb" to "GRIB 气象数据",
+        "edf" to "EDF 生理信号", "gdf" to "GDF 生理信号", "vhdr" to "BrainVision 数据头",
+        "vmrk" to "BrainVision 标记", "eeg" to "EEG 脑电数据", "cnt" to "EEG 连续数据",
+        "avg" to "EEG 平均数据", "set" to "EEG 数据集", "fdt" to "EEG 数据", "lay" to "EEG 布局",
+        "snirf" to "SNIRF 近红外数据",
+
+        // —— 音频 / 音乐工程 / 视频工程 ——
+        "sf2" to "SoundFont 2 音色库", "sfz" to "SFZ 音色定义", "dls" to "DLS 音色库",
+        "gig" to "GigaStudio 音色库", "nki" to "Kontakt 音色", "fxp" to "VST 预设",
+        "fxb" to "VST 预设库", "vst" to "VST 插件", "vst3" to "VST3 插件", "axt" to "Audio Unit 插件",
+        "aup" to "Audacity 旧版工程", "cwp" to "Cakewalk 工程", "ses" to "Adobe Audition 会话",
+        "prproj" to "Premiere Pro 工程", "veg" to "Vegas 视频工程", "vf" to "Vegas 视频工程",
+        "fcpxml" to "Final Cut Pro XML 工程", "kdenlive" to "Kdenlive 视频工程",
+        "mlt" to "MLT 视频工程", "wlmp" to "Windows Live 影音工程", "dvp" to "DV 视频工程",
+        "drp" to "DaVinci Resolve 工程", "aep" to "After Effects 工程", "aepx" to "After Effects XML 工程",
+        "hip" to "Houdini 工程", "hiplc" to "Houdini 非商业工程", "nk" to "Nuke 工程",
+        "nukescript" to "Nuke 脚本", "camproj" to "Camtasia 工程", "camrec" to "Camtasia 录制",
+        "screenflow" to "ScreenFlow 工程", "fla" to "Flash 工程", "xfl" to "Flash 工程目录",
+
+        // —— 图像 / 3D / CAD / 游戏资源 ——
+        "ora" to "OpenRaster 分层图像", "krz" to "Krita 笔刷", "ase" to "Aseprite 精灵",
+        "aseprite" to "Aseprite 工程", "pixel" to "Pixel 图像", "piskel" to "Piskel 精灵",
+        "3ds" to "3DS ROM / 3D Studio 模型", "dae" to "Collada 3D 模型", "wrl" to "VRML 3D 模型",
+        "vrml" to "VRML 3D 模型", "x3d" to "X3D 3D 模型", "x3db" to "X3D 二进制模型",
+        "pcd" to "PCD 点云", "pts" to "PTS 点云", "xyz" to "XYZ 点云", "e57" to "E57 点云",
+        "skp" to "SketchUp 模型", "nwd" to "Navisworks 模型", "nwc" to "Navisworks 缓存",
+        "nwf" to "Navisworks 文件集", "pck" to "Godot 资源包", "unitypackage" to "Unity 资源包",
+        "unity3d" to "Unity 资源包", "assetbundle" to "Unity AssetBundle", "resS" to "Unity 资源数据",
+        "uasset" to "Unreal 资源", "umap" to "Unreal 地图", "uexp" to "Unreal 资源数据",
+        "ubulk" to "Unreal 批量数据",
+        "nes" to "NES ROM", "sfc" to "SNES ROM", "smc" to "SNES ROM", "gb" to "Game Boy ROM",
+        "gbc" to "Game Boy Color ROM", "gba" to "GBA ROM", "nds" to "Nintendo DS ROM",
+        "cia" to "3DS CIA 安装包", "3dsx" to "3DS 自制程序", "nsp" to "Switch NSP 包",
+        "xci" to "Switch XCI 镜像", "wbfs" to "Wii WBFS 镜像", "wud" to "Wii U 磁盘",
+        "wup" to "Wii U 更新包", "rpx" to "Wii U 可执行文件", "dol" to "GameCube/Wii 可执行文件",
+        "chd" to "MAME CHD 镜像", "gdi" to "Dreamcast GDI 镜像", "gcz" to "GameCube GCZ 镜像",
+        "rvz" to "Dolphin RVZ 镜像", "wia" to "Wii WIA 镜像", "nkit" to "NKit 压缩镜像",
+
+        // —— 安装包 / 安全 / 系统配置 ——
+        "msix" to "MSIX 安装包", "appx" to "AppX 安装包", "appxbundle" to "AppX 捆绑包",
+        "msixbundle" to "MSIX 捆绑包", "appinstaller" to "App Installer 描述",
+        "nupkg" to "NuGet 包", "vsix" to "VS Code 扩展包", "xpi" to "Firefox 扩展包",
+        "crx" to "Chrome 扩展包", "whl" to "Python Wheel 包", "egg" to "Python Egg 包",
+        "gem" to "RubyGem 包", "crate" to "Rust Crate 包", "apkm" to "APKM 安装包",
+        "appimage" to "AppImage 便携程序", "flatpak" to "Flatpak 包", "run" to "Linux 安装程序",
+        "csr" to "证书签名请求", "p10" to "PKCS#10 证书请求", "p7b" to "PKCS#7 证书链",
+        "p7c" to "PKCS#7 证书", "spc" to "软件发布证书", "pvk" to "私钥文件",
+        "ppk" to "PuTTY 私钥", "pub" to "公钥文件", "gpg" to "GnuPG 加密/签名文件",
+        "pgp" to "PGP 加密/签名文件", "asc" to "ASCII 签名/密钥", "sig" to "数字签名",
+        "ovpn" to "OpenVPN 配置", "rdp" to "远程桌面配置", "nmconnection" to "NetworkManager 连接",
+        "network" to "网络配置", "netdev" to "systemd 网络设备", "link" to "systemd 网络链路",
+        "mount" to "systemd 挂载单元", "automount" to "systemd 自动挂载",
+        "path" to "systemd 路径单元", "slice" to "systemd 资源切片", "scope" to "systemd 作用域",
+        "target" to "systemd 启动目标", "device" to "systemd 设备单元",
+        "pf" to "Prefetch 预读取文件", "evtx" to "Windows 事件日志", "etl" to "Windows 跟踪日志",
+        "mdmp" to "Windows 小型转储", "hdmp" to "Windows 堆转储",
+        "torrent" to "BitTorrent 种子", "aria2" to "aria2 下载任务",
+        "part" to "未完成下载", "crdownload" to "Chrome 未完成下载",
+        "download" to "未完成下载", "opdownload" to "Opera 未完成下载",
+        "swp" to "Vim 交换文件", "swo" to "Vim 交换文件"
+    )
+
+    private fun more6Label(e: String): String? = EXT_LABEL_MORE6[e]
+
     /** 两段/三段组合后缀的完整说明，详情和列表都用这个 */
     private val COMPOUND_LABEL = mapOf(
         "tar.gz" to "TAR.GZ 压缩包", "tar.bz2" to "TAR.BZ2 压缩包", "tar.xz" to "TAR.XZ 压缩包",
@@ -803,6 +957,11 @@ object TypeDetect {
         "7z.001" to "7Z 分卷压缩包（第 1 卷）", "zip.001" to "ZIP 分卷压缩包（第 1 卷）",
         "rar.001" to "RAR 分卷压缩包（第 1 卷）", "tar.001" to "TAR 分卷压缩包（第 1 卷）",
         "tar.gz.001" to "TAR.GZ 分卷压缩包（第 1 卷）",
+        "tar.bz2.001" to "TAR.BZ2 分卷压缩包（第 1 卷）",
+        "tar.xz.001" to "TAR.XZ 分卷压缩包（第 1 卷）",
+        "tar.lzma.001" to "TAR.LZMA 分卷压缩包（第 1 卷）",
+        "tar.lz.001" to "TAR.LZ 分卷压缩包（第 1 卷）",
+        "tar.z.001" to "TAR.Z 分卷压缩包（第 1 卷）",
         "tar.zst.001" to "TAR.ZST 分卷压缩包（第 1 卷）",
         "tar.lz4.001" to "TAR.LZ4 分卷压缩包（第 1 卷）",
         "tar.br.001" to "TAR.BR 分卷压缩包（第 1 卷）",
@@ -820,7 +979,16 @@ object TypeDetect {
         "nii.gz" to "NIfTI 压缩医学影像",
         "osm.pbf" to "OpenStreetMap PBF 数据",
         "d.ts" to "TypeScript 声明文件", "min.js" to "压缩版 JavaScript", "min.css" to "压缩版 CSS",
-        "user.js" to "浏览器用户脚本", "user.css" to "浏览器用户样式", "schema.json" to "JSON Schema 描述文件"
+        "user.js" to "浏览器用户脚本", "user.css" to "浏览器用户样式", "schema.json" to "JSON Schema 描述文件",
+        "go.mod" to "Go 模块文件", "go.sum" to "Go 模块校验", "package.json" to "Node.js 包描述",
+        "package-lock.json" to "npm 锁定文件", "Cargo.toml" to "Rust 包描述", "Cargo.lock" to "Rust 锁定文件",
+        "build.gradle.kts" to "Gradle Kotlin 构建脚本", "settings.gradle.kts" to "Gradle Kotlin 设置",
+        "gradle.properties" to "Gradle 配置", "AndroidManifest.xml" to "Android 清单文件",
+        "requirements.txt" to "Python 依赖清单", "Pipfile" to "Pipenv 配置", "Pipfile.lock" to "Pipenv 锁定文件",
+        "pyproject.toml" to "Python 项目配置", "poetry.lock" to "Poetry 锁定文件",
+        "composer.json" to "Composer 包描述", "composer.lock" to "Composer 锁定文件",
+        "Gemfile.lock" to "Bundler 锁定文件", "Podfile.lock" to "CocoaPods 锁定文件",
+        "docker-compose.yml" to "Docker Compose 配置", "docker-compose.yaml" to "Docker Compose 配置"
     ) + (1..99).associate { "%03d".format(it) to "分卷 / 拆分文件（第 $it 卷）" } +
         (0..99).associate { "r%02d".format(it) to "RAR 分卷（第 $it 卷）" } +
         (1..99).associate { "z%02d".format(it) to "ZIP 分卷（第 $it 卷）" }
@@ -878,6 +1046,7 @@ object TypeDetect {
         more3Label(e)?.let { return it }
         more4Label(e)?.let { return it }
         more5Label(e)?.let { return it }
+        more6Label(e)?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"

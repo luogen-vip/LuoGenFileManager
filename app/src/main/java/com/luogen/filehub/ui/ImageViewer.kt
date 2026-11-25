@@ -343,6 +343,8 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     LaunchedEffect(query) {
         val q = query.trim()
         AppState.searchQuery = q
+        if (q.isEmpty()) Prefs.setUiStringSoft("search_query", "")
+        else Prefs.setUiStringSoft("search_query", q)
         if (q.isEmpty()) {
             results = emptyList()
             searched = false
@@ -376,6 +378,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     LaunchedEffect(filt, excluded) {
         AppState.searchFilt = filt
         AppState.searchExcluded = excluded
+        AppState.persistSearchFilters(filt, excluded)
     }
 
     val shown = remember(results, filt, excluded) {

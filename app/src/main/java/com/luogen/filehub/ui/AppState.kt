@@ -2,6 +2,7 @@ package com.luogen.filehub.ui
 
 import android.content.Context
 import com.luogen.filehub.data.FileRepo
+import com.luogen.filehub.data.Prefs
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -46,40 +47,94 @@ object AppState {
     var searchFilt by mutableStateOf<Cat?>(null)
     var searchExcluded by mutableStateOf<Set<Cat>>(emptySet())
 
+    /** 搜索筛选也是设置：清后台/重新进也要保留 */
+    fun restoreSearchFilters() {
+        searchQuery = Prefs.uiString("search_query")
+        val f = Prefs.uiString("search_filter")
+        searchFilt = Cat.values().firstOrNull { it.name == f }
+        val ex = Prefs.uiString("search_excluded")
+        searchExcluded = if (ex.isBlank()) emptySet() else ex.split(",")
+            .mapNotNull { n -> Cat.values().firstOrNull { it.name == n } }.toSet()
+    }
+
+    fun persistSearchFilters(filt: Cat?, excluded: Set<Cat>) {
+        Prefs.setUiString("search_filter", filt?.name ?: "")
+        Prefs.setUiString("search_excluded", excluded.joinToString(",") { it.name })
+    }
+
     // ---------- 分类页搜索词（点进文件再返回，搜索结果不丢）----------
     private val catQueries = HashMap<String, String>()
-    fun catQuery(cat: Cat): String = catQueries[cat.name] ?: ""
-    fun setCatQuery(cat: Cat, q: String) { catQueries[cat.name] = q }
+    fun catQuery(cat: Cat): String =
+        catQueries[cat.name] ?: Prefs.uiString("cat_query_" + cat.name)
+
+    fun setCatQuery(cat: Cat, q: String) {
+        catQueries[cat.name] = q
+        if (q.isBlank()) Prefs.setUiString("cat_query_" + cat.name, "")
+        else Prefs.setUiStringSoft("cat_query_" + cat.name, q)
+    }
 
     private val catTabs = HashMap<String, Int>()
     private val catFavs = HashMap<String, String>()
     private val catGrids = HashMap<String, Boolean>()
-    fun catTab(cat: Cat): Int = catTabs[cat.name] ?: 0
-    fun setCatTab(cat: Cat, v: Int) { catTabs[cat.name] = v }
-    fun catFav(cat: Cat): Cat? = catFavs[cat.name]?.let { n ->
-        Cat.values().firstOrNull { it.name == n }
+    fun catTab(cat: Cat): Int = catTabs[cat.name] ?: Prefs.uiInt("cat_tab_" + cat.name, 0)
+    fun setCatTab(cat: Cat, v: Int) {
+        catTabs[cat.name] = v
+        Prefs.setUiInt("cat_tab_" + cat.name, v)
+    }
+    fun catFav(cat: Cat): Cat? {
+        val n = catFavs[cat.name] ?: Prefs.uiString("cat_fav_" + cat.name)
+        return Cat.values().firstOrNull { it.name == n }
     }
     fun setCatFav(cat: Cat, v: Cat?) {
         if (v == null) catFavs.remove(cat.name) else catFavs[cat.name] = v.name
+        Prefs.setUiString("cat_fav_" + cat.name, v?.name ?: "")
     }
-    fun catGrid(cat: Cat): Boolean = catGrids[cat.name] ?: (cat == Cat.IMAGE || cat == Cat.VIDEO)
-    fun setCatGrid(cat: Cat, v: Boolean) { catGrids[cat.name] = v }
+    fun catGrid(cat: Cat): Boolean =
+        catGrids[cat.name] ?: Prefs.uiBool("cat_grid_" + cat.name, cat == Cat.IMAGE || cat == Cat.VIDEO)
+
+    fun setCatGrid(cat: Cat, v: Boolean) {
+        catGrids[cat.name] = v
+        Prefs.setUiBool("cat_grid_" + cat.name, v)
+    }
 
     // ---------- 我的文件：每个浏览页记住当前目录 + 每个目录的搜索词 ----------
     private val browseCurrents = HashMap<String, String>()
     private val browseQueries = HashMap<String, String>()
-    fun browseCurrent(owner: String, fallback: String): String = browseCurrents[owner] ?: fallback
-    fun setBrowseCurrent(owner: String, path: String) { browseCurrents[owner] = path }
-    fun browseQuery(owner: String, path: String): String = browseQueries[owner + "|" + path] ?: ""
+    fun browseCurrent(owner: String, fallback: String): String =
+        browseCurrents[owner] ?: Prefs.uiString("browse_current_" + owner, fallback)
+
+    fun setBrowseCurrent(owner: String, path: String) {
+        browseCurrents[owner] = path
+        Prefs.setUiString("browse_current_" + owner, path)
+    }
+
+    fun browseQuery(owner: String, path: String): String =
+        browseQueries[owner + "|" + path] ?: Prefs.uiString("browse_query_" + owner + "|" + path)
+
     fun setBrowseQuery(owner: String, path: String, q: String) {
-        if (q.isBlank()) browseQueries.remove(owner + "|" + path) else browseQueries[owner + "|" + path] = q
+        val k = owner + "|" + path
+        if (q.isBlank()) {
+            browseQueries.remove(k)
+            Prefs.setUiString("browse_query_$k", "")
+        } else {
+            browseQueries[k] = q
+            Prefs.setUiStringSoft("browse_query_$k", q)
+        }
     }
 
     // ---------- 压缩包内条目搜索 ----------
     private val archiveFilters = HashMap<String, String>()
-    fun archiveFilter(path: String): String = archiveFilters[path] ?: ""
+    fun archiveFilter(path: String): String =
+        archiveFilters[path] ?: Prefs.uiString("archive_filter_" + path)
+
     fun setArchiveFilter(path: String, q: String) {
-        if (q.isBlank()) archiveFilters.remove(path) else archiveFilters[path] = q
+        if (q.isBlank()) {
+            archiveFilters.remove(path)
+            Prefs.setUiString("archive_filter_" + path, "")
+        } else {
+            archiveFilters[path] = q
+            Prefs.setUiStringSoft("archive_filter_" + path, q)
+        }
     }
 
     // ---------- 列表数据缓存 ----------

@@ -3,13 +3,20 @@ package com.luogen.filehub.ui
 import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import com.luogen.filehub.data.FileRepo
+import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.model.Cat
 
 @Composable
 fun AppNav(ctx: Context, nav: NavStack) {
     val repo = remember { FileRepo(ctx) }
+
+    // 每次导航变化立刻落盘：被后台清理后重新打开仍回到这一页/这一层
+    LaunchedEffect(nav.current) {
+        try { Prefs.saveNavRoutes(nav.routes()) } catch (_: Throwable) {}
+    }
 
     BackHandler(enabled = nav.stack.size > 1) { nav.pop() }
 
