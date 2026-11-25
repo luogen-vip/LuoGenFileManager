@@ -42,12 +42,10 @@ import java.io.File
  */
 @Composable
 fun MiniPlayerBar(nav: NavStack) {
-    var tick by remember { mutableStateOf(0L) }
     LaunchedEffect(Unit) {
         while (true) {
             AudioHub.tick()
-            tick = System.currentTimeMillis()
-            delay(500)
+            delay(700)
         }
     }
     val path = AudioHub.currentPath() ?: return

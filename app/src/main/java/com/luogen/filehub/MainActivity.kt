@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("open_ftp", false) == true) AppState.ftpOpenRequested = true
         super.onCreate(savedInstanceState)
         Prefs.init(this)
+        // 进程被系统回收后再打开：把上次队列接回来；上次正在播就继续播
+        try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         try {
             androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                 .isAppearanceLightStatusBars = true

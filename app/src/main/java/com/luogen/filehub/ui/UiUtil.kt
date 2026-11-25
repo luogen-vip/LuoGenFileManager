@@ -115,6 +115,13 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "afdesign", "afphoto", "afpub", "blend", "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf",
     "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb" -> Icons.Filled.Brush
     "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
+    "gba", "gbc", "gb", "nds", "3ds", "cia", "nsp", "xci", "wad", "wbfs", "cso", "pbp",
+    "vpk", "xex", "god", "rpx", "wud", "wux", "rvz", "gcm", "nes", "snes", "smc", "sfc",
+    "n64", "z64", "v64", "md", "gen", "sms", "gg", "pce", "sgx", "32x", "a26", "a52", "a78",
+    "j64", "jag", "col", "int", "vec", "d64", "t64", "crt", "d81", "adf", "ipf", "st", "stx", "msa" -> Icons.Filled.SportsEsports
+    "onnx", "pt", "pth", "ckpt", "safetensors", "tflite", "mlmodel", "gguf", "ggml", "keras",
+    "joblib", "pkl", "pickle", "npy", "npz", "hprof", "dmp", "minidump", "heap" -> Icons.Filled.Memory
+    "pcap", "pcapng", "cap", "saz", "kdb", "opvault", "keychain", "psafe3", "sxf" -> Icons.Filled.Security
     "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
     "feather", "arrow", "hdf5", "h5", "nc", "mat", "sav", "dta", "sas7bdat", "xpt", "rdata", "rds" -> Icons.Filled.Storage
     "apk", "xapk", "apks", "aab", "ap", "ipa", "pkg", "mpkg", "flatpakref", "flatpakrepo", "run", "appimage" -> Icons.Filled.Apps
@@ -131,6 +138,13 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "psd", "psb", "ai", "indd", "sketch", "fig", "xd", "cdr", "eps", "kra", "clip", "sai", "afdesign", "afphoto", "afpub" -> Icons.Filled.Brush
     "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf", "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb", "blend" -> Icons.Filled.Brush
     "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
+    "gba", "gbc", "gb", "nds", "3ds", "cia", "nsp", "xci", "wad", "wbfs", "cso", "pbp",
+    "vpk", "xex", "god", "rpx", "wud", "wux", "rvz", "gcm", "nes", "snes", "smc", "sfc",
+    "n64", "z64", "v64", "md", "gen", "sms", "gg", "pce", "sgx", "32x", "a26", "a52", "a78",
+    "j64", "jag", "col", "int", "vec", "d64", "t64", "crt", "d81", "adf", "ipf", "st", "stx", "msa" -> Icons.Filled.SportsEsports
+    "onnx", "pt", "pth", "ckpt", "safetensors", "tflite", "mlmodel", "gguf", "ggml", "keras",
+    "joblib", "pkl", "pickle", "npy", "npz", "hprof", "dmp", "minidump", "heap" -> Icons.Filled.Memory
+    "pcap", "pcapng", "cap", "saz", "kdb", "opvault", "keychain", "psafe3", "sxf" -> Icons.Filled.Security
     "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
     "feather", "arrow", "hdf5", "h5", "nc", "mat", "sav", "dta", "sas7bdat", "xpt", "rdata", "rds" -> Icons.Filled.Storage
     "kml", "kmz", "gpx", "fit", "tcx" -> Icons.Filled.Place

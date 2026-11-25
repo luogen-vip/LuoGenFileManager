@@ -369,7 +369,8 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                             trailing = {
                                 Box {
                                     IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null, tint = TextDim) }
-                                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                    if (menu) {
+                                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                         DropdownMenuItem(text = { Text("详细信息") }, onClick = { menu = false; showInfo = item })
                                         if (!item.isDir && com.luogen.filehub.data.TypeDetect.catOf(item.name, item.mime) == Cat.AUDIO) {
                                             DropdownMenuItem(text = { Text("加入播放列表") }, onClick = {
@@ -409,6 +410,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                                                 AppState.countsDirty = true
                                             })
                                         }
+                                    }
                                     }
                                 }
                             }

@@ -27,6 +27,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.luogen.filehub.ui.MainActivity
 import com.luogen.filehub.R
+import org.json.JSONArray
 import java.io.File
 
 /**
@@ -57,6 +58,60 @@ object AudioHub {
     var repeatMode by mutableStateOf(0)
         private set
     private var startedService = false
+    private var restored = false
+
+    private fun audioSp(): android.content.SharedPreferences? =
+        appCtx?.getSharedPreferences("lgfm_audio_state", Context.MODE_PRIVATE)
+
+    /** 把队列/曲目/进度写盘：进程被系统杀掉后还能恢复 */
+    private fun saveState() {
+        val sp = audioSp() ?: return
+        try {
+            sp.edit()
+                .putString("queue", JSONArray(playlist).toString())
+                .putInt("index", index)
+                .putLong("pos", player?.currentPosition ?: position)
+                .putBoolean("playing", player?.isPlaying == true)
+                .putInt("repeat", repeatMode)
+                .apply()
+        } catch (_: Throwable) {}
+    }
+
+    private fun clearSavedState() {
+        try { audioSp()?.edit()?.clear()?.apply() } catch (_: Throwable) {}
+    }
+
+    /** 进程重建时把上次的队列接回来；被杀前正在播就自动续播 */
+    private fun restoreState(p: ExoPlayer) {
+        if (restored) return
+        restored = true
+        val sp = audioSp() ?: return
+        val arr = try { JSONArray(sp.getString("queue", "[]") ?: "[]") } catch (_: Throwable) { JSONArray() }
+        if (arr.length() == 0) return
+        val q = ArrayList<String>()
+        for (i in 0 until arr.length()) {
+            val path = arr.optString(i, "")
+            if (path.isNotEmpty() && File(path).exists()) q.add(path)
+        }
+        if (q.isEmpty()) return
+        playlist = q
+        index = sp.getInt("index", 0).coerceIn(0, q.lastIndex)
+        repeatMode = sp.getInt("repeat", 0).coerceIn(0, 2)
+        shuffleOn = repeatMode == 2
+        p.shuffleModeEnabled = shuffleOn
+        p.repeatMode = when (repeatMode) {
+            1 -> Player.REPEAT_MODE_ONE
+            2 -> Player.REPEAT_MODE_ALL
+            else -> Player.REPEAT_MODE_OFF
+        }
+        q.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
+        p.seekTo(index, sp.getLong("pos", 0L).coerceAtLeast(0L))
+        p.prepare()
+        val wasPlaying = sp.getBoolean("playing", false)
+        p.playWhenReady = wasPlaying
+        playing = wasPlaying
+        if (wasPlaying) startForegroundService()
+    }
 
     fun currentPath(): String? = playlist.getOrNull(index)
 
@@ -101,6 +156,7 @@ object AudioHub {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
+                saveState()
                 pushState()
                 refreshNotification()
             }
@@ -117,6 +173,7 @@ object AudioHub {
                 index = p.currentMediaItemIndex.coerceAtLeast(0)
                 duration = p.duration.coerceAtLeast(0)
                 position = 0
+                saveState()
                 pushState()
                 refreshNotification()
             }
@@ -141,6 +198,7 @@ object AudioHub {
             s.isActive = true
             session = s
         }
+        restoreState(p)
         pushState()
         return p
     }
@@ -165,6 +223,7 @@ object AudioHub {
         p.seekTo(idx, 0)
         p.prepare()
         p.playWhenReady = true
+        saveState()
         pushState()
         startForegroundService()
         refreshNotification()
@@ -187,12 +246,14 @@ object AudioHub {
             p.play()
             startForegroundService()
         }
+        saveState()
         pushState()
         refreshNotification()
     }
 
     fun pauseForVideo() {
         player?.pause()
+        saveState()
         pushState()
         refreshNotification()
     }
@@ -203,13 +264,22 @@ object AudioHub {
         val count = p.mediaItemCount
         if (count == 0) return
         val cur = p.currentMediaItemIndex.coerceIn(0, count - 1)
-        if (shuffleOn) {
+        if (count == 1) {
+            // 只有一首时“下一曲”就从头再播这首，随机模式也一样
+            p.seekTo(0, 0)
+        } else if (shuffleOn) {
             p.seekToNextMediaItem()
+            if (p.currentMediaItemIndex == cur) {
+                var target = (0 until count).random()
+                if (target == cur) target = (target + 1) % count
+                p.seekTo(target, 0)
+            }
         } else {
             val target = if (cur + 1 < count) cur + 1 else 0
             p.seekTo(target, 0)
         }
         p.play()
+        saveState()
         pushState()
         refreshNotification()
     }
@@ -220,13 +290,21 @@ object AudioHub {
         val count = p.mediaItemCount
         if (count == 0) return
         val cur = p.currentMediaItemIndex.coerceIn(0, count - 1)
-        if (shuffleOn) {
+        if (count == 1) {
+            p.seekTo(0, 0)
+        } else if (shuffleOn) {
             p.seekToPreviousMediaItem()
+            if (p.currentMediaItemIndex == cur) {
+                var target = (0 until count).random()
+                if (target == cur) target = (target + 1) % count
+                p.seekTo(target, 0)
+            }
         } else {
             val target = if (cur - 1 >= 0) cur - 1 else count - 1
             p.seekTo(target, 0)
         }
         p.play()
+        saveState()
         pushState()
         refreshNotification()
     }
@@ -252,6 +330,7 @@ object AudioHub {
         add.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
         playlist = playlist + add
         p.shuffleModeEnabled = shuffleOn
+        saveState()
         pushState()
         refreshNotification()
         return add.size
@@ -264,13 +343,19 @@ object AudioHub {
         playlist = playlist.toMutableList().also { it.removeAt(pos) }
         if (playlist.isEmpty()) {
             p?.clearMediaItems()
-            p?.pause()
+            p?.stop()
             index = 0
             playing = false
+            clearSavedState()
+            appCtx?.let { c ->
+                NotificationManagerCompatSafe.cancel(c)
+                try { c.stopService(Intent(c, AudioFgService::class.java)) } catch (_: Throwable) {}
+            }
         } else {
             if (p != null && pos < p.mediaItemCount) p.removeMediaItem(pos)
             index = index.coerceIn(0, playlist.lastIndex)
         }
+        saveState()
         pushState()
         refreshNotification()
     }
@@ -284,6 +369,7 @@ object AudioHub {
     fun seekTo(ms: Long) {
         player?.seekTo(ms.coerceAtLeast(0))
         position = ms.coerceAtLeast(0)
+        saveState()
         pushState()
     }
 
@@ -301,8 +387,13 @@ object AudioHub {
         shuffleOn = repeatMode == 2
         player?.let { p ->
             p.shuffleModeEnabled = shuffleOn
-            p.repeatMode = if (repeatMode == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+            p.repeatMode = when (repeatMode) {
+                1 -> Player.REPEAT_MODE_ONE
+                2 -> Player.REPEAT_MODE_ALL
+                else -> Player.REPEAT_MODE_OFF
+            }
         }
+        saveState()
         pushState()
         refreshNotification()
         return repeatMode
@@ -319,6 +410,7 @@ object AudioHub {
         // 保留播放列表与当前曲目：下次点播放还能原地续播，不会变成点了没反应
         player?.clearMediaItems()
         playing = false
+        saveState()
         appCtx?.let { NotificationManagerCompatSafe.cancel(it) }
         appCtx?.let { c ->
             try { c.stopService(Intent(c, AudioFgService::class.java)) } catch (_: Throwable) {}

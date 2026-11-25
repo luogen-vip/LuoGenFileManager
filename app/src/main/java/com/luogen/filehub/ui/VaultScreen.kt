@@ -636,13 +636,15 @@ private fun VaultContent(ctx: Context, nav: NavStack, repo: FileRepo, key: Secre
                             }
                             Box {
                                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null, tint = TextDim) }
-                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                if (menu) {
+                                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                     DropdownMenuItem(text = { Text("解密预览") }, onClick = { menu = false; preview(e) })
                                     DropdownMenuItem(text = { Text("详情") }, onClick = { menu = false; infoFor = e })
                                     DropdownMenuItem(text = { Text("选中此文件") }, onClick = {
                                         menu = false
                                         selected = selected + e.id
                                     })
+                                }
                                 }
                             }
                         }

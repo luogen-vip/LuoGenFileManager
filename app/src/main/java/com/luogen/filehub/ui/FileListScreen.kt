@@ -889,7 +889,8 @@ private fun ListCell(
         trailing = {
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null, tint = TextDim) }
-                DropdownMenu(
+                if (menu) {
+                    DropdownMenu(
                     expanded = menu,
                     onDismissRequest = { menu = false },
                     shape = RoundedCornerShape(16)
@@ -989,6 +990,7 @@ private fun ListCell(
                             onRefresh()
                         })
                     }
+                }
                 }
             }
         }

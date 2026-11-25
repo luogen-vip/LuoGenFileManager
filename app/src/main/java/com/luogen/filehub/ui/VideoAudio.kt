@@ -246,7 +246,6 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var toast by remember { mutableStateOf<String?>(null) }
     var seekDrag by remember { mutableStateOf<Float?>(null) }
     var pendingSeek by remember { mutableStateOf<Long?>(null) }
-    var tick by remember { mutableStateOf(0L) }
     var queueOpen by remember { mutableStateOf(false) }
 
     val hub = AudioHub
@@ -267,8 +266,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             pendingSeek?.let { target ->
                 if (kotlin.math.abs(hub.position - target) < 1200) pendingSeek = null
             }
-            tick = System.currentTimeMillis()
-            delay(300)
+            delay(500)
         }
     }
 
@@ -326,9 +324,6 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null) }
-            IconButton(onClick = { queueOpen = true }) {
-                Icon(Icons.Filled.PlaylistPlay, null, tint = BrandBlue)
-            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { coverPicker.launch("image/*") }) {
                 Icon(Icons.Filled.AddPhotoAlternate, null, tint = TextDim)
@@ -393,26 +388,48 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         }
 
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { hub.prev() }) {
-                Icon(Icons.Filled.SkipPrevious, null, tint = TextDim)
+        // 五格等宽：循环、上一曲、播放、下一曲、列表，全部严格居中，左右对称
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                IconButton(onClick = { hub.cycleRepeat() }) {
+                    Icon(
+                        when (hub.repeatMode) {
+                            1 -> Icons.Filled.RepeatOne
+                            2 -> Icons.Filled.Shuffle
+                            else -> Icons.Filled.Repeat
+                        },
+                        "播放模式",
+                        tint = if (hub.repeatMode != 0) BrandBlue else TextDim
+                    )
+                }
             }
-            FloatingActionButton(onClick = { hub.toggle() }, containerColor = BrandBlue) {
-                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(30.dp))
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                IconButton(onClick = { hub.prev() }) {
+                    Icon(Icons.Filled.SkipPrevious, "上一曲", tint = TextDim, modifier = Modifier.size(30.dp))
+                }
             }
-            IconButton(onClick = { hub.next() }) {
-                Icon(Icons.Filled.SkipNext, null, tint = TextDim)
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                FloatingActionButton(
+                    onClick = { hub.toggle() },
+                    containerColor = BrandBlue,
+                    modifier = Modifier.size(62.dp)
+                ) {
+                    Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null,
+                        tint = Color.White, modifier = Modifier.size(30.dp))
+                }
             }
-            IconButton(onClick = { hub.cycleRepeat() }) {
-                Icon(
-                    when (hub.repeatMode) {
-                        1 -> Icons.Filled.RepeatOne
-                        2 -> Icons.Filled.Shuffle
-                        else -> Icons.Filled.Repeat
-                    },
-                    null,
-                    tint = if (hub.repeatMode != 0) BrandBlue else TextDim
-                )
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                IconButton(onClick = { hub.next() }) {
+                    Icon(Icons.Filled.SkipNext, "下一曲", tint = TextDim, modifier = Modifier.size(30.dp))
+                }
+            }
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                IconButton(onClick = { queueOpen = true }) {
+                    Icon(Icons.Filled.PlaylistPlay, "播放列表", tint = BrandBlue, modifier = Modifier.size(26.dp))
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -436,7 +453,13 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             current = hub.index,
             playing = hub.playing,
             onPlay = { i -> hub.playQueueAt(i, ctx); queueOpen = false },
-            onRemove = { i -> hub.removeAt(i) },
+            onRemove = { i ->
+                hub.removeAt(i)
+                if (hub.playlist.isEmpty()) {
+                    queueOpen = false
+                    nav.pop()
+                }
+            },
             onDismiss = { queueOpen = false }
         )
     }
