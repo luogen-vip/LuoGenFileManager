@@ -328,7 +328,8 @@ object ArchiveUtil {
     private fun splitStreaming(kind: String) = kind in TARLIKE || kind in GZLIKE || kind in BZ2LIKE ||
         kind in XZLIKE || kind in ZSTD || kind in LZ4 || kind in BROTLI
 
-    private fun splitRandom(kind: String) = kind in ZIPLIKE || kind in RARLIKE || kind in SEVENZ || kind in ISOLIKE
+    private fun splitRandom(kind: String) = kind in ZIPLIKE || kind in RARLIKE || kind in SEVENZ
+    private fun splitBrowse(kind: String) = splitRandom(kind) || kind in ISOLIKE
 
     private fun splitInnerName(g: SplitGroup, kind: String): String {
         val n = g.baseName
@@ -452,7 +453,7 @@ object ArchiveUtil {
         return try {
             when {
                 splitStreaming(kind) -> listSplitStream(g, kind)
-                splitRandom(kind) -> {
+                splitBrowse(kind) -> {
                     val tmp = mergeGroupTemp(g, kind)
                     try { list(tmp) } finally { try { tmp.delete() } catch (_: Throwable) {} }
                 }
