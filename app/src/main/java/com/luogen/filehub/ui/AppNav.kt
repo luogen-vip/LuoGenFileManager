@@ -16,14 +16,22 @@ fun AppNav(ctx: Context, nav: NavStack) {
     when (val s = nav.current) {
         is Screen.Home -> HomeScreen(ctx, nav, repo)
 
-        is Screen.CatList -> when (s.cat) {
-            Cat.CLEAN -> CleanupScreen(ctx, nav, repo)
-            Cat.VAULT -> VaultScreen(ctx, nav, repo)
-            Cat.FILE -> BrowseScreen(ctx, nav, repo, android.os.Environment.getExternalStorageDirectory().absolutePath)
-            else -> FileListScreen(ctx, nav, repo, s.cat)
+        is Screen.CatList -> {
+            // 每次真正进入“我的文件”都是一次新的根浏览；查看器返回时仍复用同一个 key
+            val rootKey = remember(s) { "catfile:" + System.nanoTime() }
+            when (s.cat) {
+                Cat.CLEAN -> CleanupScreen(ctx, nav, repo)
+                Cat.VAULT -> VaultScreen(ctx, nav, repo)
+                Cat.FILE -> BrowseScreen(
+                    ctx, nav, repo,
+                    android.os.Environment.getExternalStorageDirectory().absolutePath,
+                    "browse:" + rootKey
+                )
+                else -> FileListScreen(ctx, nav, repo, s.cat)
+            }
         }
 
-        is Screen.Browse -> BrowseScreen(ctx, nav, repo, s.dir)
+        is Screen.Browse -> BrowseScreen(ctx, nav, repo, s.dir, "browse:" + s.id)
         is Screen.ImageView -> ImageViewerScreen(nav, s.paths, s.start)
         is Screen.VideoView -> VideoViewerScreen(nav, s.paths, s.start)
         is Screen.AudioView -> AudioViewerScreen(nav, s.paths, s.start)

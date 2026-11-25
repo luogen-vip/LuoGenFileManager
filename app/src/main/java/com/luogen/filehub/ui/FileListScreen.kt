@@ -66,21 +66,21 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
-    var appTab by remember { mutableStateOf(0) }
+    var appTab by remember(cat) { mutableStateOf(AppState.catTab(cat)) }
     val cacheKey = "list:${cat.name}:$appTab"
 
     var items by remember(cacheKey) { mutableStateOf(AppState.cached(cacheKey) ?: emptyList()) }
     var loading by remember(cacheKey) { mutableStateOf(AppState.cached(cacheKey) == null) }
-    var query by remember { mutableStateOf("") }
+    var query by remember(cat) { mutableStateOf(AppState.catQuery(cat)) }
     var sortMode by remember { mutableStateOf(Prefs.sortMode()) }
     var asc by remember { mutableStateOf(Prefs.sortAsc()) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var force by remember { mutableStateOf(0) }
-    var gridMode by remember { mutableStateOf(cat == Cat.IMAGE || cat == Cat.VIDEO) }
+    var gridMode by remember(cat) { mutableStateOf(AppState.catGrid(cat)) }
     var sortExpanded by remember { mutableStateOf(false) }
     var prog by remember { mutableStateOf<Prog?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
-    var favFilter by remember { mutableStateOf<Cat?>(null) }
+    var favFilter by remember(cat) { mutableStateOf(AppState.catFav(cat)) }
 
     var showRename by remember { mutableStateOf<FileItem?>(null) }
     var showBatch by remember { mutableStateOf<List<FileItem>?>(null) }
@@ -95,8 +95,14 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
 
     val root = android.os.Environment.getExternalStorageDirectory().absolutePath
 
-    // 返回键：勾选中先取消勾选，再按才退出
-    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
+    // 返回键：勾选 → 清搜索词回到分类内容 → 再按才退出
+    BackHandler(enabled = selected.isNotEmpty() || query.isNotBlank()) {
+        if (selected.isNotEmpty()) selected = emptySet()
+        else {
+            query = ""
+            AppState.setCatQuery(cat, "")
+        }
+    }
 
     LaunchedEffect(cacheKey, force) {
         // 收藏 / 回收站永远读真实数据，不吃缓存：收藏完、彻底删除完进来必须立刻是真实内容
@@ -302,14 +308,21 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            if (selected.isNotEmpty()) selected = emptySet() else nav.pop()
+                            if (selected.isNotEmpty()) selected = emptySet()
+                            else if (query.isNotBlank()) {
+                                query = ""
+                                AppState.setCatQuery(cat, "")
+                            } else nav.pop()
                         }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
                     },
                     actions = {
                         IconButton(onClick = {
                             selected = if (selected.size == display.size) emptySet() else display.map { it.key }.toSet()
                         }) { Icon(Icons.Filled.Checklist, null, tint = TextMain) }
-                        IconButton(onClick = { gridMode = !gridMode }) {
+                        IconButton(onClick = {
+                            gridMode = !gridMode
+                            AppState.setCatGrid(cat, gridMode)
+                        }) {
                             Icon(if (gridMode) Icons.Filled.ViewList else Icons.Filled.GridView, null, tint = TextMain)
                         }
                         Box {
@@ -351,7 +364,10 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     Box(Modifier.weight(1f)) {
                         BasicTextField(
                             value = query,
-                            onValueChange = { query = it },
+                            onValueChange = {
+                                query = it
+                                AppState.setCatQuery(cat, it)
+                            },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 13.sp)
                         )
@@ -360,7 +376,10 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     if (query.isNotEmpty()) {
                         Icon(
                             Icons.Filled.Close, null, tint = TextDim,
-                            modifier = Modifier.size(17.dp).clickable { query = "" }
+                            modifier = Modifier.size(17.dp).clickable {
+                                query = ""
+                                AppState.setCatQuery(cat, "")
+                            }
                         )
                     }
                 }
@@ -371,14 +390,14 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                         FilterChip(
                             selected = appTab == 0,
-                            onClick = { appTab = 0; selected = emptySet() },
+                            onClick = { appTab = 0; AppState.setCatTab(cat, 0); selected = emptySet() },
                             label = { Text("已安装") },
                             shape = RoundedCornerShape(20)
                         )
                         Spacer(Modifier.width(8.dp))
                         FilterChip(
                             selected = appTab == 1,
-                            onClick = { appTab = 1; selected = emptySet() },
+                            onClick = { appTab = 1; AppState.setCatTab(cat, 1); selected = emptySet() },
                             label = { Text("安装包") },
                             shape = RoundedCornerShape(20)
                         )
@@ -392,7 +411,10 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                         listOf(null, Cat.IMAGE, Cat.VIDEO, Cat.AUDIO, Cat.DOC, Cat.APP, Cat.ARCHIVE).forEach { f ->
                             FilterChip(
                                 selected = favFilter == f,
-                                onClick = { favFilter = f },
+                                onClick = {
+                                    favFilter = if (favFilter == f) null else f
+                                    AppState.setCatFav(cat, favFilter)
+                                },
                                 label = { Text(if (f == null) "全部" else f.title) },
                                 shape = RoundedCornerShape(20)
                             )

@@ -210,7 +210,8 @@ class NavStack {
 sealed class Screen {
     object Home : Screen()
     data class CatList(val cat: com.luogen.filehub.model.Cat) : Screen()
-    data class Browse(val dir: String) : Screen()
+    // id 让每一次“从某处点进文件夹”都是一个独立浏览页，返回不会串目录
+    data class Browse(val dir: String, val id: Long = System.nanoTime()) : Screen()
     data class ImageView(val paths: List<String>, val start: Int) : Screen()
     data class VideoView(val paths: List<String>, val start: Int) : Screen()
     data class AudioView(val paths: List<String>, val start: Int) : Screen()
@@ -228,6 +229,11 @@ sealed class Screen {
 fun openItem(ctx: Context, nav: NavStack, item: com.luogen.filehub.model.FileItem, siblings: List<com.luogen.filehub.model.FileItem>) {
     val file = File(item.path)
     if (!file.exists()) return
+    // 搜索结果里可能混着文件夹：点文件夹必须进目录，不能当文件丢给系统
+    if (file.isDirectory) {
+        nav.push(Screen.Browse(file.absolutePath))
+        return
+    }
     val cat = com.luogen.filehub.data.TypeDetect.catOfFile(file, item.mime)
     when (cat) {
         com.luogen.filehub.model.Cat.IMAGE -> {

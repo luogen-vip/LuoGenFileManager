@@ -48,13 +48,26 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
+fun BrowseScreen(
+    ctx: Context,
+    nav: NavStack,
+    repo: FileRepo,
+    dirPath: String,
+    stateKey: String = "browse:" + dirPath
+) {
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
-    var current by remember { mutableStateOf(File(dirPath)) }
+    val startPath = dirPath
+    val startDir = File(dirPath)
+    val restored = AppState.browseCurrent(stateKey, dirPath)
+    val initialDir = File(restored).takeIf {
+        it.exists() && (it.absolutePath == startDir.absolutePath ||
+            it.absolutePath.startsWith(startDir.absolutePath.trimEnd('/') + "/"))
+    } ?: startDir
+    var current by remember(stateKey) { mutableStateOf(initialDir) }
     var items by remember { mutableStateOf<List<FileItem>>(emptyList()) }
-    var query by remember { mutableStateOf("") }
+    var query by remember(stateKey) { mutableStateOf(AppState.browseQuery(stateKey, initialDir.absolutePath)) }
     var sortMode by remember { mutableStateOf(Prefs.sortMode()) }
     var asc by remember { mutableStateOf(Prefs.sortAsc()) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -74,7 +87,6 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     var showSpinner by remember { mutableStateOf(false) }
     val browseCache = remember { HashMap<String, List<FileItem>>() }
     var sortExpanded by remember { mutableStateOf(false) }
-    val startPath = dirPath
     val rootPath = android.os.Environment.getExternalStorageDirectory().absolutePath
     var volumes by remember { mutableStateOf<List<com.luogen.filehub.model.VolumeInfo>>(emptyList()) }
     LaunchedEffect(current.absolutePath) {
@@ -96,12 +108,38 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         try { listState.scrollToItem(0) } catch (_: Throwable) {}
     }
 
-    // 系统返回键：与左上角箭头一致 —— 先取消勾选，再回上一级文件夹，最后才退出
+    fun saveQuery() = AppState.setBrowseQuery(stateKey, current.absolutePath, query)
+
+    // 切目录：先把当前目录的搜索词存起来，再把目标目录上次的搜索词恢复出来
+    fun goTo(dir: File) {
+        saveQuery()
+        val q = AppState.browseQuery(stateKey, dir.absolutePath)
+        query = q
+        current = dir
+    }
+
+    fun goParent() {
+        val parent = current.parentFile ?: return
+        saveQuery()
+        val q = AppState.browseQuery(stateKey, parent.absolutePath)
+        query = q
+        current = parent
+    }
+
+    LaunchedEffect(stateKey, current.absolutePath) {
+        AppState.setBrowseCurrent(stateKey, current.absolutePath)
+    }
+
+    // 系统返回键：勾选 → 清搜索 → 上一级目录 → 退出，绝不从深层直接跳回总目录
     BackHandler(enabled = true) {
         when {
             selected.isNotEmpty() -> selected = emptySet()
+            query.isNotBlank() -> {
+                AppState.setBrowseQuery(stateKey, current.absolutePath, "")
+                query = ""
+            }
             current.absolutePath != startPath && current.absolutePath != rootPath && current.parentFile != null ->
-                current = current.parentFile!!
+                goParent()
             else -> nav.pop()
         }
     }
@@ -199,8 +237,11 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                         IconButton(onClick = {
                             if (selected.isNotEmpty()) {
                                 selected = emptySet()
+                            } else if (query.isNotBlank()) {
+                                AppState.setBrowseQuery(stateKey, current.absolutePath, "")
+                                query = ""
                             } else if (current.absolutePath != startPath && current.absolutePath != rootPath && current.parentFile != null) {
-                                current = current.parentFile!!
+                                goParent()
                             } else {
                                 nav.pop()
                             }
@@ -247,14 +288,20 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                     Box(Modifier.weight(1f)) {
                         BasicTextField(
                             value = query,
-                            onValueChange = { query = it },
+                            onValueChange = {
+                                query = it
+                                AppState.setBrowseQuery(stateKey, current.absolutePath, it)
+                            },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 13.sp)
                         )
                         if (query.isEmpty()) Text("在当前文件夹搜索…", color = TextDim, fontSize = 13.sp)
                     }
                     if (query.isNotEmpty()) {
-                        Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable { query = "" })
+                        Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable {
+                            query = ""
+                            AppState.setBrowseQuery(stateKey, current.absolutePath, "")
+                        })
                     }
                 }
                 if (query.isNotBlank()) PathJumpBar(nav, query, Cat.FILE)
@@ -329,7 +376,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                             val v = extraVols[idx]
                             Row(
                                 Modifier.fillMaxWidth()
-                                    .clickable { current = File(v.path) }
+                                    .clickable { goTo(File(v.path)) }
                                     .padding(horizontal = 14.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -359,7 +406,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                             onClick = {
                                 when {
                                     selected.isNotEmpty() -> toggleSel(selected, item.key) { selected = it }
-                                    item.isDir -> current = File(item.path)
+                                    item.isDir -> goTo(File(item.path))
                                     item.path.endsWith(".apk", true) -> {
                                         if (!FileOps.installApk(ctx, item.path)) toast = "请在系统里允许安装未知应用"
                                     }

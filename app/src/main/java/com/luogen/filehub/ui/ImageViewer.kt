@@ -321,6 +321,8 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     var filt by remember { mutableStateOf(AppState.searchFilt) }
     var excluded by remember { mutableStateOf(AppState.searchExcluded) }
     var showExclude by remember { mutableStateOf(false) }
+    // 搜索页返回：先清空搜索词，回到输入前的内容；再按才退出这一页
+    BackHandler(enabled = query.isNotBlank()) { query = "" }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) {
@@ -411,7 +413,9 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
+                    IconButton(onClick = {
+                        if (query.isNotBlank()) query = "" else nav.pop()
+                    }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
                     Row(
                         Modifier
                             .weight(1f)

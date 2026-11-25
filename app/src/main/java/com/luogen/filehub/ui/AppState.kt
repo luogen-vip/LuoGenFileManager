@@ -46,6 +46,35 @@ object AppState {
     var searchFilt by mutableStateOf<Cat?>(null)
     var searchExcluded by mutableStateOf<Set<Cat>>(emptySet())
 
+    // ---------- 分类页搜索词（点进文件再返回，搜索结果不丢）----------
+    private val catQueries = HashMap<String, String>()
+    fun catQuery(cat: Cat): String = catQueries[cat.name] ?: ""
+    fun setCatQuery(cat: Cat, q: String) { catQueries[cat.name] = q }
+
+    private val catTabs = HashMap<String, Int>()
+    private val catFavs = HashMap<String, String>()
+    private val catGrids = HashMap<String, Boolean>()
+    fun catTab(cat: Cat): Int = catTabs[cat.name] ?: 0
+    fun setCatTab(cat: Cat, v: Int) { catTabs[cat.name] = v }
+    fun catFav(cat: Cat): Cat? = catFavs[cat.name]?.let { n ->
+        Cat.values().firstOrNull { it.name == n }
+    }
+    fun setCatFav(cat: Cat, v: Cat?) {
+        if (v == null) catFavs.remove(cat.name) else catFavs[cat.name] = v.name
+    }
+    fun catGrid(cat: Cat): Boolean = catGrids[cat.name] ?: (cat == Cat.IMAGE || cat == Cat.VIDEO)
+    fun setCatGrid(cat: Cat, v: Boolean) { catGrids[cat.name] = v }
+
+    // ---------- 我的文件：每个浏览页记住当前目录 + 每个目录的搜索词 ----------
+    private val browseCurrents = HashMap<String, String>()
+    private val browseQueries = HashMap<String, String>()
+    fun browseCurrent(owner: String, fallback: String): String = browseCurrents[owner] ?: fallback
+    fun setBrowseCurrent(owner: String, path: String) { browseCurrents[owner] = path }
+    fun browseQuery(owner: String, path: String): String = browseQueries[owner + "|" + path] ?: ""
+    fun setBrowseQuery(owner: String, path: String, q: String) {
+        if (q.isBlank()) browseQueries.remove(owner + "|" + path) else browseQueries[owner + "|" + path] = q
+    }
+
     // ---------- 列表数据缓存 ----------
     private val lists = HashMap<String, List<FileItem>>()
     private val listsAt = HashMap<String, Long>()
