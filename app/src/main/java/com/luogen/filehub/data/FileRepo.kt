@@ -143,12 +143,17 @@ class FileRepo(private val ctx: Context) {
     fun archives(): List<FileItem> = allMediaFiles().filter(archiveFilter)
 
     /** 只查 .apk，避免每次刷新都把一万多条媒体记录全扫一遍；同时剔除已被删掉的文件 */
-    fun apkFiles(): List<FileItem> = query(
-        MediaStore.Files.getContentUri("external"),
-        selection = "LOWER(${MediaStore.MediaColumns.DISPLAY_NAME}) LIKE ?",
-        selectionArgs = arrayOf("%.apk"),
-        sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-    ).filter { File(it.path).isFile }
+    fun apkFiles(): List<FileItem> {
+        val fast = query(
+            MediaStore.Files.getContentUri("external"),
+            selection = "LOWER(${MediaStore.MediaColumns.DISPLAY_NAME}) LIKE ?",
+            selectionArgs = arrayOf("%.apk"),
+            sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        )
+        // 极少数机型/ROM 不支持 LOWER 选择时，退回完整媒体列表，绝不把安装包页变成空白
+        val rows = if (fast.isEmpty()) allMediaFiles().filter(apkFilter) else fast
+        return rows.filter { File(it.path).isFile }
+    }
 
     /** 下载：Download 集合 + 最近 30 天新增文件（全盘，不限目录），按时间倒序 */
     fun downloads(): List<FileItem> {
