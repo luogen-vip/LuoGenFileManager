@@ -188,6 +188,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
             }
             prog = null
             toast = msg
+            AppState.markDataChanged()
             selected = emptySet()
         }
     }

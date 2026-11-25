@@ -134,6 +134,7 @@ class FileRepo(private val ctx: Context) {
         sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
         limit = limit
     ).filter { !it.isDir && File(it.path).isFile }
+        .map { it.copy(modified = File(it.path).lastModified().takeIf { m -> m > 0 } ?: it.modified) }
 
     private val docFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.DOC_EXT }
     private val archiveFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.ARCHIVE_EXT && it.ext != "apk" }
@@ -153,6 +154,8 @@ class FileRepo(private val ctx: Context) {
         // 极少数机型/ROM 不支持 LOWER 选择时，退回完整媒体列表，绝不把安装包页变成空白
         val rows = if (fast.isEmpty()) allMediaFiles().filter(apkFilter) else fast
         return rows.filter { File(it.path).isFile }
+            .map { it.copy(modified = File(it.path).lastModified().takeIf { m -> m > 0 } ?: it.modified) }
+            .sortedByDescending { it.modified }
     }
 
     /** 下载：Download 集合 + 最近 30 天新增文件（全盘，不限目录），按时间倒序 */
@@ -172,7 +175,9 @@ class FileRepo(private val ctx: Context) {
         ).forEach {
             if (File(it.path).isFile) map[it.path] = it
         }
-        return map.values.sortedByDescending { it.modified }
+        return map.values.map {
+            it.copy(modified = File(it.path).lastModified().takeIf { m -> m > 0 } ?: it.modified)
+        }.sortedByDescending { it.modified }
     }
 
     fun favorites(): List<FileItem> {

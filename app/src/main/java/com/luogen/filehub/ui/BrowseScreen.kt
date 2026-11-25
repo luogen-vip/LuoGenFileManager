@@ -223,9 +223,7 @@ fun BrowseScreen(
             val msg = try { block { p, m -> prog = Prog(title, p, m) } } catch (t: Throwable) { "失败：${t.message}" }
             prog = null
             toast = msg
-            AppState.countsDirty = true
-            AppState.cleanDirty = true
-            refresh++
+            AppState.markDataChanged()
             selected = emptySet()
         }
     }
@@ -439,7 +437,7 @@ fun BrowseScreen(
                                         DropdownMenuItem(text = { Text("恢复默认名") }, onClick = {
                                             menu = false
                                             toast = FileOps.restoreDefault(item) ?: "已恢复"
-                                            refresh++
+                                            AppState.markDataChanged()
                                         })
                                         DropdownMenuItem(text = { Text(if (Prefs.isFav(item.path)) "取消收藏" else "收藏") }, onClick = {
                                             menu = false
@@ -455,9 +453,7 @@ fun BrowseScreen(
                                         DropdownMenuItem(text = { Text("移入回收站") }, onClick = {
                                             menu = false
                                             toast = if (FileOps.deleteToTrash(ctx, listOf(item)) > 0) "已移入回收站" else "失败"
-                                            AppState.countsDirty = true
-                                            AppState.cleanDirty = true
-                                            refresh++
+                                            AppState.markDataChanged()
                                         })
                                         if (current.absolutePath != rootPath && current.parentFile != null) {
                                             DropdownMenuItem(text = { Text("上一级") }, onClick = {
@@ -521,7 +517,7 @@ fun BrowseScreen(
                         if (f != null) {
                             showNewFolder = false; showNewFile = false; newName = ""
                             toast = "已创建 ${f.name}"
-                            refresh++
+                            AppState.markDataChanged()
                             if (!isFolder && com.luogen.filehub.data.TypeDetect.catOf(f.name) == Cat.DOC) nav.push(Screen.TextView(f.absolutePath))
                         } else {
                             toast = if (File(current, clean).exists()) "创建失败：同名文件已存在" else "创建失败：没有写入权限（请确认已授予「所有文件访问权限」）"
@@ -537,7 +533,7 @@ fun BrowseScreen(
         RenameDialog(initial = item.name, onDismiss = { showRename = null }, onConfirm = { nn ->
             showRename = null
             toast = FileOps.rename(item, nn) ?: "已重命名"
-            refresh++
+            AppState.markDataChanged()
         })
     }
 
