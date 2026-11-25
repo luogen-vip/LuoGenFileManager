@@ -47,6 +47,7 @@ import com.luogen.filehub.data.FileOps
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.data.TypeDetect
 import com.luogen.filehub.model.FileItem
+import com.luogen.filehub.model.extOf
 import com.luogen.filehub.model.nameNoExt
 import com.luogen.filehub.model.toFullTime
 import com.luogen.filehub.model.toSizeText
@@ -361,7 +362,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "${File(currentPath).name.substringAfterLast('.', "").uppercase()} · ${File(currentPath).length().toSizeText()} · ${index + 1}/${queuePaths.size}",
+            "${extOf(File(currentPath).name).uppercase()} · ${File(currentPath).length().toSizeText()} · ${index + 1}/${queuePaths.size}",
             color = TextDim, fontSize = 12.sp
         )
 

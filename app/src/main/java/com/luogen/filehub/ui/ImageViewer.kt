@@ -169,7 +169,7 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                 "分辨率" to bounds,
                 "大小" to f.length().toSizeText(),
                 "修改时间" to f.lastModified().toFullTime(),
-                "格式" to f.name.substringAfterLast('.', "").uppercase(),
+                "格式" to com.luogen.filehub.model.extOf(f.name).uppercase(),
                 "文件类型" to TypeDetect.labelOf(f.name),
                 "完整路径" to path
             ),

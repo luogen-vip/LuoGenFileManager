@@ -184,7 +184,7 @@ fun docIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "html", "htm", "xml", "json", "yaml", "yml", "toml", "ini", "conf", "cfg" -> Icons.Filled.Code
     "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr", "cb7", "djvu", "lit" -> Icons.Filled.MenuBook
     "hwp", "hwpx", "wps", "ofd", "xps", "oxps", "one", "onetoc2", "docxf" -> Icons.Filled.Description
-    "tex", "ltx", "bib", "typ", "cls", "sty" -> Icons.Filled.Code
+    "tex", "ltx", "bib", "typ", "cls", "sty", "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json" -> Icons.Filled.Code
     "java", "kt", "kts", "py", "js", "ts", "css", "sh", "bat", "c", "cpp", "h", "go", "rs", "php", "sql" -> Icons.Filled.Terminal
     else -> Icons.Filled.Article
 }

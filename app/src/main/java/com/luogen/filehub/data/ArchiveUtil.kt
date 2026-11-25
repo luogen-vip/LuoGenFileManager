@@ -52,9 +52,19 @@ object ArchiveUtil {
     private val LZMALIKE = setOf("lzma", "tlz")
     private val ZLIKE = setOf("z")
 
+    /** tar.gz / tar.bz2 / tar.xz 等两段后缀归一成底层压缩算法，方便复用解压流程 */
+    private fun normalizeExt(e: String): String = when (e) {
+        "tar.gz" -> "gz"
+        "tar.bz2" -> "bz2"
+        "tar.xz" -> "xz"
+        "tar.lzma" -> "lzma"
+        "tar.z" -> "z"
+        else -> e
+    }
+
     /** 后缀不可靠时用文件头兜底：没有后缀/被改名的 zip、7z、rar 也能解 */
     private fun effExt(file: File): String {
-        val e = extOf(file.name)
+        val e = normalizeExt(extOf(file.name))
         if (e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE || e in GZLIKE || e in BZ2LIKE ||
             e in XZLIKE || e in ISOLIKE || e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
         ) return e
@@ -72,7 +82,7 @@ object ArchiveUtil {
             e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
     }
 
-    fun formatName(file: File): String = effExt(file).uppercase().ifEmpty { "未知" }
+    fun formatName(file: File): String = extOf(file.name).uppercase().ifEmpty { "未知" }
 
     // ---------------- 列表 ----------------
 
@@ -286,6 +296,25 @@ object ArchiveUtil {
 
     private fun listSingleStream(file: File, e: String): ArchiveResult {
         val inner = innerNameOf(file, e)
+        if (inner.endsWith(".tar", true) || e == "tlz") {
+            val raw = BufferedInputStream(FileInputStream(file))
+            val stream: InputStream = when (e) {
+                "lzma", "tlz" -> LZMACompressorInputStream(raw)
+                "z" -> ZCompressorInputStream(raw)
+                else -> raw
+            }
+            val entries = ArrayList<ArchiveEntry>()
+            stream.use { ins ->
+                TarArchiveInputStream(ins).use { tis ->
+                    var t: TarArchiveEntry? = tis.nextEntry
+                    while (t != null) {
+                        entries.add(ArchiveEntry(t.name, t.size.coerceAtLeast(0), t.isDirectory))
+                        t = tis.nextEntry
+                    }
+                }
+            }
+            return ArchiveResult(true, entries = entries, count = entries.size)
+        }
         return ArchiveResult(true, entries = listOf(ArchiveEntry(inner, file.length(), false)), count = 1)
     }
 

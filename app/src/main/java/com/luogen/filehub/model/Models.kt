@@ -33,7 +33,7 @@ data class FileItem(
     val extra: String = "",          // 附加信息，如原路径
     val encrypted: Boolean = false
 ) {
-    val ext: String get() = name.substringAfterLast('.', "").lowercase()
+    val ext: String get() = com.luogen.filehub.model.extOf(name)
     val key: String get() = if (id.isNotEmpty()) id else path
 }
 

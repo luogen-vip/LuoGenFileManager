@@ -61,17 +61,35 @@ fun Long.toDayTitle(): String {
     return ymd.format(Date(this))
 }
 
+/** 明确支持“两段/三段扩展名”的组合后缀；不在表里的仍按最后一个点判断，避免误伤 a.b.txt */
+private val COMPOUND_EXT = setOf(
+    "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lz4", "tar.lzma", "tar.lz", "tar.z", "tar.br",
+    "7z.001", "zip.001", "rar.001", "tar.001", "tar.gz.001",
+    "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json"
+)
+
 fun nameNoExt(name: String): String {
-    val dot = name.lastIndexOf('.')
-    return if (dot > 0) name.substring(0, dot) else name
+    val n = name.trim()
+    val e = extOf(n)
+    if (e.isEmpty()) return n
+    return n.substring(0, n.length - e.length - 1)
 }
 
 fun extOf(name: String): String {
-    // 真正的扩展名永远是“最后一个点”后面那一段；即使删到只剩 ".apk" 也算 apk，
-    // 不能把前面文件名里的点当成扩展名分隔符
+    // 先匹配已知组合后缀（tar.gz、7z.001、d.ts 等），否则仍按最后一个点判断；
+    // 即使删到只剩 ".apk" 也算 apk，不把文件名里的点误当扩展名。
     val n = name.trim()
+    val lower = n.lowercase(Locale.ROOT)
+    val parts = lower.split('.')
+    if (parts.size > 1) {
+        val max = minOf(3, parts.size - 1)
+        for (size in max downTo 2) {
+            val candidate = parts.takeLast(size).joinToString(".")
+            if (candidate in COMPOUND_EXT) return candidate
+        }
+    }
     val dot = n.lastIndexOf('.')
-    return if (dot >= 0 && dot < n.length - 1) n.substring(dot + 1).lowercase() else ""
+    return if (dot >= 0 && dot < n.length - 1) n.substring(dot + 1).lowercase(Locale.ROOT) else ""
 }
 
 fun parentPathOf(path: String): String {

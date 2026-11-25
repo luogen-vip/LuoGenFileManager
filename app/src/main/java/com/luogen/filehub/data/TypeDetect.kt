@@ -56,7 +56,8 @@ object TypeDetect {
         "sldx", "sldm", "pages", "numbers", "key", "hwp", "hwpx", "wps", "et", "dps", "ofd",
         "xps", "oxps", "one", "onetoc2", "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr",
         "cb7", "djvu", "lit", "tex", "ltx", "bib", "typ", "cls", "sty", "ris", "enw", "nbib",
-        "sla", "scd", "kepub", "ibooks", "pdb", "xmind", "mmd", "puml", "drawio", "mpp", "gantt", "mermaid"
+        "sla", "scd", "kepub", "ibooks", "pdb", "xmind", "mmd", "puml", "drawio", "mpp", "gantt", "mermaid",
+        "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json"
 
     )
 
@@ -69,7 +70,9 @@ object TypeDetect {
         "001", "7z.001", "zip.001", "bzip2", "gzip", "compress", "zoo", "ace", "pea", "sit", "sitx", "hqx",
         "aab", "apkm", "jar", "war", "ear", "aar", "bundle", "framework", "toast", "b5t", "b6t",
         "ccd", "mds", "mdf", "nrg", "cdi", "daa", "uif", "isz", "vhd", "vhdx", "vmdk", "qcow",
-        "qcow2", "ova", "ovf", "hdd", "vbox", "pvm", "cpio", "ar", "deb", "lzma", "tlz", "z", "sfx"
+        "qcow2", "ova", "ovf", "hdd", "vbox", "pvm", "cpio", "ar", "deb", "lzma", "tlz", "z", "sfx",
+        "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "tar.lz4", "tar.lzma", "tar.lz", "tar.z", "tar.br",
+        "7z.001", "zip.001", "rar.001", "tar.001", "tar.gz.001"
 
     )
 
@@ -95,6 +98,8 @@ object TypeDetect {
             // apk / xapk 本质是 zip，但类型必须显示成应用，不能被当成压缩包
             e == "apk" || e == "xapk" || e == "apks" || mime == "application/vnd.android.package-archive" -> Cat.APP
             e in IMAGE_EXT || mime.startsWith("image/") -> Cat.IMAGE
+            // .ts 既是 MPEG-TS 视频也是 TypeScript；有文本 MIME 时按代码处理
+            e == "ts" && (mime.startsWith("text/") || mime.contains("typescript")) -> Cat.DOC
             e in VIDEO_EXT || mime.startsWith("video/") -> Cat.VIDEO
             e in AUDIO_EXT || mime.startsWith("audio/") -> Cat.AUDIO
             e in ARCHIVE_EXT || mime.contains("zip") || mime.contains("compressed") || mime.contains("x-7z") -> Cat.ARCHIVE
@@ -346,7 +351,7 @@ object TypeDetect {
         "glb" to "GLB 三维模型", "stl" to "STL 三维模型", "parquet" to "Parquet 数据表",
         "avro" to "Avro 数据文件", "orc" to "ORC 列式数据", "feather" to "Feather 数据表",
         "arrow" to "Arrow 数据表", "hdf5" to "HDF5 科学数据", "h5" to "HDF5 科学数据",
-        "nc" to "NetCDF 气象数据", "mat" to "MATLAB 数据", "sav" to "SPSS 数据",
+        "nc" to "NetCDF 气象数据", "mat" to "MATLAB 数据", "sav" to "SPSS 数据 / 游戏存档",
         "dta" to "Stata 数据", "sas7bdat" to "SAS 数据", "xpt" to "SAS 传输数据",
         "rdata" to "R 数据", "rds" to "R 数据 · RDS", "otf" to "OpenType 字体",
         "woff" to "Web 字体 · WOFF", "woff2" to "Web 字体 · WOFF2", "eot" to "嵌入式字体 · EOT",
@@ -358,7 +363,7 @@ object TypeDetect {
         "asc" to "ASCII 签名/密钥", "sig" to "数字签名", "pem" to "PEM 证书/密钥",
         "toast" to "Toast 光盘映像", "b5t" to "BlindWrite 光盘映像", "b6t" to "BlindWrite 光盘映像",
         "ccd" to "CloneCD 光盘描述", "cue" to "光盘轨道表 · CUE", "mds" to "Alcohol 光盘描述",
-        "mdf" to "Alcohol 光盘镜像", "nrg" to "Nero 光盘映像", "cdi" to "DiscJuggler 光盘映像",
+        "mdf" to "Alcohol 光盘镜像 / SQL 数据库", "nrg" to "Nero 光盘映像", "cdi" to "DiscJuggler 光盘映像",
         "daa" to "PowerISO 光盘映像", "uif" to "MagicISO 光盘映像", "isz" to "压缩光盘映像"
     )
 
@@ -437,7 +442,7 @@ object TypeDetect {
         "djvu" to "DjVu 扫描文档",
         "kepub" to "Kobo 电子书",
         "ibooks" to "Apple 电子书",
-        "pdb" to "Palm 文档",
+        "pdb" to "Palm 文档 / 调试符号",
         "xmind" to "XMind 思维导图",
         "mmd" to "Mermaid 图表",
         "puml" to "PlantUML 图表",
@@ -488,7 +493,7 @@ object TypeDetect {
         "wbfs" to "Wii 备份镜像",
         "cso" to "PSP 压缩镜像",
         "pbp" to "PSP 游戏包",
-        "vpk" to "Valve 资源包",
+        "vpk" to "PS Vita 应用包 / Valve 资源包",
         "xex" to "Xbox 360 可执行",
         "god" to "Xbox 360 GOD 包",
         "rpx" to "Wii U 可执行",
@@ -503,7 +508,7 @@ object TypeDetect {
         "n64" to "N64 游戏",
         "z64" to "N64 游戏",
         "v64" to "N64 游戏",
-        "md" to "Mega Drive 游戏",
+        "md" to "Markdown 文档",
         "gen" to "Genesis 游戏",
         "sms" to "Master System 游戏",
         "gg" to "Game Gear 游戏",
@@ -520,7 +525,7 @@ object TypeDetect {
         "vec" to "Vectrex 游戏",
         "d64" to "Commodore 64 磁盘",
         "t64" to "C64 磁带镜像",
-        "tap" to "CNC 磁带代码",
+        "tap" to "磁带镜像 / 数控代码",
         "prg" to "C64 程序",
         "crt" to "C64 卡带",
         "d81" to "C64 磁盘",
@@ -547,8 +552,8 @@ object TypeDetect {
         "gx" to "GX 打印文件",
         "lbrn" to "LightBurn 工程",
         "lbrn2" to "LightBurn 工程",
-        "art" to "ArtCAM 工程",
-        "nc" to "数控 G-code",
+        "art" to "ArtCAM 工程 / ART 运行时",
+        "nc" to "数控 G-code / NetCDF 数据",
         "ncc" to "数控代码",
         "apt" to "APT 数控代码",
         "dfx" to "DFX 模型",
@@ -728,9 +733,23 @@ object TypeDetect {
 
     private fun more4Label(e: String): String? = EXT_LABEL_MORE4[e]
 
+    /** 两段/三段组合后缀的完整说明，详情和列表都用这个 */
+    private val COMPOUND_LABEL = mapOf(
+        "tar.gz" to "TAR.GZ 压缩包", "tar.bz2" to "TAR.BZ2 压缩包", "tar.xz" to "TAR.XZ 压缩包",
+        "tar.zst" to "TAR.ZST 压缩包", "tar.lz4" to "TAR.LZ4 压缩包", "tar.lzma" to "TAR.LZMA 压缩包",
+        "tar.lz" to "TAR.LZ 压缩包", "tar.z" to "TAR.Z 压缩包", "tar.br" to "TAR.BR 压缩包",
+        "7z.001" to "7Z 分卷压缩包（第 1 卷）", "zip.001" to "ZIP 分卷压缩包（第 1 卷）",
+        "rar.001" to "RAR 分卷压缩包（第 1 卷）", "tar.001" to "TAR 分卷压缩包（第 1 卷）",
+        "tar.gz.001" to "TAR.GZ 分卷压缩包（第 1 卷）",
+        "d.ts" to "TypeScript 声明文件", "min.js" to "压缩版 JavaScript", "min.css" to "压缩版 CSS",
+        "user.js" to "浏览器用户脚本", "user.css" to "浏览器用户样式", "schema.json" to "JSON Schema 描述文件"
+    )
+
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
+        COMPOUND_LABEL[e]?.let { return it }
+        if (e == "ts" && (mime.startsWith("text/") || mime.contains("typescript"))) return "TypeScript 源码"
         EXT_LABEL[e]?.let { return it }
         moreLabel(e)?.let { return it }
         more2Label(e)?.let { return it }
@@ -772,7 +791,8 @@ object TypeDetect {
 
     private val ZIP_FAMILY = setOf(
         "zip", "apk", "xapk", "apks", "jar", "war", "docx", "xlsx", "pptx", "epub",
-        "odt", "ods", "odp", "whl", "crx", "zipx", "egg"
+        "odt", "ods", "odp", "whl", "crx", "zipx", "egg", "vsix", "nupkg", "xpi", "oxt",
+        "sb3", "love", "rpa", "hap", "hsp", "cba"
     )
 
     /** 读文件头判断真实类型，和扩展名对不上就返回提示，对的返回 null */
@@ -806,16 +826,17 @@ object TypeDetect {
         } ?: return null
         val same = when (real) {
             "zip" -> e in ZIP_FAMILY || e == "cbz" || e == "kepub"
+            "7z" -> e == "7z" || e == "cb7"
             "pdf" -> e == "pdf"
             "jpg" -> e in setOf("jpg", "jpeg", "jfif", "jpe")
             "png" -> e == "png"
             "gif" -> e == "gif"
-            "rar" -> e == "rar" || e == "cbr"
-            "7z" -> e == "7z"
+
             "flac" -> e == "flac"
             "ogg" -> e in setOf("ogg", "oga", "opus", "spx")
-            "gz" -> e in setOf("gz", "tgz")
-            "xz" -> e in setOf("xz", "txz")
+            "gz" -> e in setOf("gz", "tgz", "tar.gz", "tar.gz.001")
+            "xz" -> e in setOf("xz", "txz", "tar.xz")
+            "rar" -> e in setOf("rar", "cbr")
             else -> true
         }
         if (same) return null
@@ -858,6 +879,16 @@ object TypeDetect {
             "deb" -> "application/vnd.debian.binary-package"
             "rpm" -> "application/x-rpm"
             "iso" -> "application/x-iso9660-image"
+            "tar.gz" -> "application/gzip"
+            "tar.bz2" -> "application/x-bzip2"
+            "tar.xz" -> "application/x-xz"
+            "tar.zst" -> "application/zstd"
+            "tar.lz4" -> "application/x-lz4"
+            "tar.lzma" -> "application/x-lzma"
+            "d.ts" -> "text/typescript"
+            "min.js", "user.js" -> "application/javascript"
+            "min.css", "user.css" -> "text/css"
+            "schema.json" -> "application/schema+json"
             "apk" -> "application/vnd.android.package-archive"
             "zip" -> "application/zip"
             "rar" -> "application/x-rar-compressed"
