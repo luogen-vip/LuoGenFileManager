@@ -218,6 +218,7 @@ fun CleanCatScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                         }
                     }
                     prog = null
+                    AppState.markDataChanged()
                     AppState.cleanDirty = true
                     toast = "已清理 $ok 项，释放 ${list.sumOf { it.size }.toSizeText()}"
                     selected = emptySet()

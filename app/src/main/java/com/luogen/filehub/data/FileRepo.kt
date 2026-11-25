@@ -368,7 +368,7 @@ class FileRepo(private val ctx: Context) {
         map[Cat.DOC] = doc
         map[Cat.ARCHIVE] = archive
         map[Cat.APP] = apk + try { pm.getInstalledApplications(0).size } catch (_: Throwable) { 0 }
-        map[Cat.FAV] = Prefs.favorites().size
+        map[Cat.FAV] = favorites().size
         map[Cat.DOWNLOAD] = if (Build.VERSION.SDK_INT >= 29) countUri(MediaStore.Downloads.EXTERNAL_CONTENT_URI) else 0
         return map
     }

@@ -122,6 +122,8 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "so", "ko", "o", "a", "la", "lib", "exp", "ilk", "dll", "sys", "drv", "ocx", "cpl", "dex" -> Icons.Filled.Memory
     "vdi", "vbox", "vmx", "vag", "vhd", "vhdx", "vmdk", "qcow2", "ova", "ovf" -> Icons.Filled.Album
     "gba", "gb", "gbc", "nds", "3ds", "nes", "sfc", "smc", "z64", "n64", "cso", "chd", "pbp" -> Icons.Filled.Album
+    "pak", "vpk", "unity3d", "uasset", "umap", "assets", "ress", "bundle", "psarc", "sav", "save", "slot", "state" -> Icons.Filled.FolderZip
+    "aep", "prproj", "drp", "veg", "fcpxml", "aup", "flp", "als", "cpr", "logicx", "band" -> Icons.Filled.Movie
     "mobileprovision", "provisioningprofile", "mobileconfig", "ipsw", "car" -> Icons.Filled.Security
     "azw", "azw3", "azw4", "prc", "tcr", "fb2", "lit", "epub", "mobi", "cbz", "cbr", "cb7", "kepub" -> Icons.Filled.MenuBook
     "ttf", "otf", "woff", "woff2", "ttc", "fon", "pfb" -> Icons.Filled.TextFields
@@ -135,9 +137,10 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
 /** 文档按具体格式给小图标，一眼能看出 PDF / 表格 / 幻灯片 / 代码 / 文本 */
 fun docIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "pdf" -> Icons.Filled.PictureAsPdf
-    "doc", "docx", "odt", "rtf", "pages" -> Icons.Filled.Description
-    "xls", "xlsx", "csv", "tsv", "ods", "numbers" -> Icons.Filled.TableChart
-    "ppt", "pptx", "odp", "key" -> Icons.Filled.Slideshow
+    "doc", "docx", "odt", "rtf", "pages", "dot", "dotx", "dotm", "docm", "wpd", "sxw" -> Icons.Filled.Description
+    "xls", "xlsx", "xlsm", "xlsb", "csv", "tsv", "ods", "numbers", "xlt", "xltx", "xltm", "sxc", "odc" -> Icons.Filled.TableChart
+    "ppt", "pptx", "odp", "key", "pot", "potx", "potm", "pps", "ppsx", "pptm", "sxi" -> Icons.Filled.Slideshow
+    "jsonl", "ndjson", "qml", "ui" -> Icons.Filled.Code
     "txt", "md", "markdown", "log", "readme", "srt", "vtt", "lrc" -> Icons.Filled.TextSnippet
     "html", "htm", "xml", "json", "yaml", "yml", "toml", "ini", "conf", "cfg" -> Icons.Filled.Code
     "epub", "mobi", "azw3", "djvu" -> Icons.Filled.MenuBook

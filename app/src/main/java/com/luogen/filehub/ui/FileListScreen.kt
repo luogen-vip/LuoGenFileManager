@@ -98,8 +98,11 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
     BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
 
     LaunchedEffect(cacheKey, force) {
+        // 收藏 / 回收站永远读真实数据，不吃缓存：收藏完、彻底删除完进来必须立刻是真实内容
+        val alwaysFresh = cat == Cat.FAV || cat == Cat.TRASH
+        if (alwaysFresh) AppState.drop(cacheKey)
         if (AppState.cached(cacheKey) == null) loading = true
-        val pair = AppState.load(cacheKey, force = force > 0, ttlMs = 3 * 60 * 1000L) {
+        val pair = AppState.load(cacheKey, force = force > 0 || alwaysFresh, ttlMs = 3 * 60 * 1000L) {
             when (cat) {
                 Cat.TRASH -> TrashStore.list(ctx).map { it.toItem(ctx) }
                 Cat.APP -> if (appTab == 0) repo.installedApps()
@@ -931,6 +934,7 @@ private fun ListCell(
                             menu = false
                             TrashStore.list(ctx).firstOrNull { it.id == item.id }?.let {
                                 onMsg(TrashStore.restore(ctx, it) ?: "已还原")
+                                onRefresh()
                             }
                         })
                         DropdownMenuItem(text = { Text("彻底删除") }, onClick = {
@@ -954,6 +958,9 @@ private fun ListCell(
                         DropdownMenuItem(text = { Text(if (Prefs.isFav(item.path)) "取消收藏" else "收藏") }, onClick = {
                             menu = false
                             onMsg(if (Prefs.toggleFav(item.path)) "已收藏" else "已取消收藏")
+                            AppState.markDataChanged()
+                            AppState.countsDirty = true
+                            force++
                         })
                         DropdownMenuItem(text = { Text("分享") }, onClick = { menu = false; FileOps.share(ctx, listOf(item)) })
                         DropdownMenuItem(text = { Text("复制路径") }, onClick = {

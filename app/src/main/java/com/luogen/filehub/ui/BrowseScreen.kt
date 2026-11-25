@@ -268,6 +268,8 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                         },
                         ActionSpec("收藏", Icons.Filled.Bookmark) {
                             selItems.forEach { Prefs.toggleFav(it.path) }
+                            AppState.markDataChanged()
+                            AppState.countsDirty = true
                             toast = "已更新收藏"
                             selected = emptySet()
                         },
@@ -344,6 +346,8 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                                         DropdownMenuItem(text = { Text(if (Prefs.isFav(item.path)) "取消收藏" else "收藏") }, onClick = {
                                             menu = false
                                             toast = if (Prefs.toggleFav(item.path)) "已收藏" else "已取消收藏"
+                                            AppState.markDataChanged()
+                                            AppState.countsDirty = true
                                         })
                                         DropdownMenuItem(text = { Text("复制路径") }, onClick = {
                                             menu = false

@@ -177,10 +177,19 @@ fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                 ViewerAction(
                     if (Prefs.isFav(p)) "已收藏" else "收藏",
                     if (Prefs.isFav(p)) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder
-                ) { toast = if (Prefs.toggleFav(p)) "已收藏" else "已取消收藏" }
+                ) {
+                    toast = if (Prefs.toggleFav(p)) "已收藏" else "已取消收藏"
+                    AppState.markDataChanged()
+                    AppState.countsDirty = true
+                }
                 ViewerAction("重命名", Icons.Filled.DriveFileRenameOutline) { renameFor = p }
                 ViewerAction("删除", Icons.Filled.DeleteOutline) {
-                    if (FileOps.deleteToTrash(ctx, listOf(fi)) > 0) { toast = "已移入回收站"; nav.pop() }
+                    if (FileOps.deleteToTrash(ctx, listOf(fi)) > 0) {
+                        toast = "已移入回收站"
+                        AppState.markDataChanged()
+                        AppState.countsDirty = true
+                        nav.pop()
+                    }
                 }
                 ViewerAction("详情", Icons.Filled.Info) { infoFor = p }
             }

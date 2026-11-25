@@ -77,7 +77,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         while (true) {
             val t = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
             val v = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
-            val f = Prefs.favorites().size
+            val f = withContext(Dispatchers.IO) { try { repo.favorites().size } catch (_: Throwable) { 0 } }
             extra = Triple(t, v, f)
             kotlinx.coroutines.delay(1200)
         }
@@ -121,7 +121,9 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                 AppState.storeCounts(c)
                 Prefs.setCountsCache(c)
             }
-            extra = Triple(trash, vault, Prefs.favorites().size)
+            extra = Triple(trash, vault, withContext(Dispatchers.IO) {
+                try { repo.favorites().size } catch (_: Throwable) { 0 }
+            })
             AppState.countsDirty = false
             refreshing = false
             return@LaunchedEffect
@@ -143,12 +145,16 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
                 AppState.storeCounts(c)
                 Prefs.setCountsCache(c)
             }
-            extra = Triple(trash, vault, Prefs.favorites().size)
+            extra = Triple(trash, vault, withContext(Dispatchers.IO) {
+                try { repo.favorites().size } catch (_: Throwable) { 0 }
+            })
             refreshing = false
         } else {
             val trash = withContext(Dispatchers.IO) { try { TrashStore.list(ctx).size } catch (_: Throwable) { 0 } }
             val vault = withContext(Dispatchers.IO) { try { VaultStore.list(ctx).size } catch (_: Throwable) { 0 } }
-            extra = Triple(trash, vault, Prefs.favorites().size)
+            extra = Triple(trash, vault, withContext(Dispatchers.IO) {
+                try { repo.favorites().size } catch (_: Throwable) { 0 }
+            })
         }
     }
 
@@ -287,7 +293,7 @@ fun HomeScreen(ctx: Context, nav: NavStack, repo: FileRepo) {
         }
 
         Spacer(Modifier.height(12.dp))
-        Text("v1.4.4 · 罗根", color = TextDim, fontSize = 11.sp)
+        Text("v1.4.5 · 罗根", color = TextDim, fontSize = 11.sp)
         Spacer(Modifier.height(20.dp))
     }
 }

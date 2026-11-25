@@ -149,7 +149,9 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     DocAction("分享", Icons.Filled.Share) { FileOps.share(ctx, listOf(fi)) }
                     DocAction("详情", Icons.Filled.Info) { openInfo = true }
                     DocAction("删除", Icons.Filled.DeleteOutline) {
-                        if (FileOps.deleteToTrash(ctx, listOf(fi)) > 0) nav.pop()
+                        if (FileOps.deleteToTrash(ctx, listOf(fi)) > 0) {
+                            AppState.markDataChanged(); AppState.countsDirty = true; nav.pop()
+                        }
                     }
                 }
             }
@@ -357,7 +359,9 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
                         toast = "${file.name}\n${file.length().toSizeText()} · ${pageCount} 页\n${path}"
                     }
                     DocAction("删除", Icons.Filled.DeleteOutline) {
-                        if (FileOps.deleteToTrash(ctx, listOf(pfi)) > 0) nav.pop()
+                        if (FileOps.deleteToTrash(ctx, listOf(pfi)) > 0) {
+                            AppState.markDataChanged(); AppState.countsDirty = true; nav.pop()
+                        }
                     }
                 }
             }

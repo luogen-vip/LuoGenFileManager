@@ -11,7 +11,8 @@ object TypeDetect {
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif",
         "tif", "tiff", "ico", "jfif", "dng", "raw", "cr2", "nef", "arw", "orf", "raf", "svg",
         "psd", "psb", "xcf", "tga", "webp2", "hdr", "exr", "jxl", "jp2", "j2k", "pbm", "pgm", "ppm", "xbm", "wbmp",
-        "apng", "jpe", "cur", "ani", "icns", "heics", "avifs", "dds"
+        "apng", "jpe", "cur", "ani", "icns", "heics", "avifs", "dds",
+        "cr3", "crw", "dc2", "dcr", "k25", "kdc", "mos", "mrw", "pef", "srw", "x3f", "rw2", "erf", "mef", "iiq", "3fr"
     )
 
     val VIDEO_EXT = setOf(

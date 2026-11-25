@@ -141,11 +141,14 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                     if (Prefs.isFav(cur)) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder
                 ) {
                     toast = if (Prefs.toggleFav(cur)) "已收藏" else "已取消收藏"
+                    AppState.markDataChanged()
+                    AppState.countsDirty = true
                 }
                 ViewerAction("重命名", Icons.Filled.DriveFileRenameOutline) { renameFor = cur }
                 ViewerAction("删除", Icons.Filled.DeleteOutline) {
                     val n = FileOps.deleteToTrash(ctx, listOf(itemOf(cur)))
                     toast = if (n > 0) "已移入回收站" else "删除失败"
+                    if (n > 0) { AppState.markDataChanged(); AppState.countsDirty = true }
                     nav.pop()
                 }
                 ViewerAction("详情", Icons.Filled.Info) { infoFor = cur }
