@@ -69,7 +69,8 @@ private val COMPOUND_EXT = setOf(
     "iso.001", "esd.001", "wim.001", "img.001", "bin.001", "dmg.001",
     "qcow2.001", "vmdk.001", "vhd.001", "vhdx.001", "exe.001",
     "nii.gz", "osm.pbf",
-    "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json"
+    "d.ts", "min.js", "min.css", "user.js", "user.css", "schema.json",
+    "h2.db", "mv.db"
 )
 
 fun nameNoExt(name: String): String {

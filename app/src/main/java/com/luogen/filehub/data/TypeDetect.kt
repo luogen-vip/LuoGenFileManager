@@ -21,7 +21,7 @@ object TypeDetect {
         "rmvb", "rm", "mpg", "mpeg", "vob", "asf", "ogv", "m2ts", "f4v", "divx", "mts",
         "mxf", "m2v", "m1v", "3g2", "3gpp", "qt", "yuv", "h264", "h265", "hevc", "vp9", "av1", "ts",
         "m3u8", "mpd", "dv", "f4p", "ogm", "rmhd", "swf", "viv", "amv", "cavs",
-        "mpv", "y4m", "ivf", "264", "265", "vp8", "vvc"
+        "mpv", "y4m", "ivf", "264", "265", "vp8", "vvc", "m2p", "mpe", "r3d", "braw", "ari"
     )
 
     val AUDIO_EXT = setOf(
@@ -29,7 +29,7 @@ object TypeDetect {
         "ape", "aiff", "aif", "mid", "midi", "mka", "ac3", "dts", "m4b", "caf", "ra",
         "m4r", "amr-wb", "awb", "tta", "wv", "mpc", "spx", "gsm", "voc", "au", "snd", "3ga", "aob",
         "aifc", "mp4a", "dsf", "dff", "m3u", "pls", "xspf", "wpl", "cue", "kar", "smf", "mod", "xm", "it", "s3m",
-        "eac3", "thd", "mlp", "m4b", "m4r"
+        "eac3", "thd", "mlp", "m4b", "m4r", "mp2", "mpa", "tak", "ofr", "ofs", "dss", "ds2", "msv", "vox", "sam", "dct"
     )
 
     val DOC_EXT = setOf(
@@ -70,7 +70,15 @@ object TypeDetect {
         "vcproj", "pbxproj", "xcconfig", "entitlements", "podspec", "gemspec", "nuspec",
         "cabal", "opam", "rockspec", "spec", "sum", "rdf", "ttl", "nt", "nq", "trig", "trix",
         "jsonld", "topojson", "kml", "gpx", "tcx", "gml", "osm", "prj", "cpg",
-        "qgs", "mif", "vhdr", "vmrk", "lay", "obs", "rinex", "sp3", "clk"
+        "qgs", "mif", "vhdr", "vmrk", "lay", "obs", "rinex", "sp3", "clk",
+        "indt", "indb", "qxp", "vsdm", "vssx", "vstx", "vssm", "vstm", "mpt", "mpx", "onepkg",
+        "dbx", "msf", "emlx", "olk14", "olk15", "ldif", "vcard", "nws",
+        "tpz", "topaz", "imp", "hlv", "lrs", "lrx", "ebk", "mbp",
+        "sami", "jss", "mpl2", "qtxt", "bookmark", "jsonl", "psv", "hl7", "qml", "sld",
+        "gtf", "gff", "gff3", "bed", "fasta", "fa", "fna", "faa", "fastq", "fq", "mzml", "mzxml",
+        "gitattributes", "gitmodules", "gitconfig", "dockerignore", "editorconfig",
+        "clang-format", "clang-tidy", "eslintrc", "prettierrc", "stylelintrc", "babelrc",
+        "pylintrc", "flake8", "coveragerc"
 
     )
 
@@ -115,7 +123,12 @@ object TypeDetect {
         "vcproj", "pbxproj", "xcconfig", "entitlements", "podspec", "gemspec", "nuspec",
         "cabal", "opam", "rockspec", "spec", "sum", "rdf", "ttl", "nt", "nq", "trig", "trix",
         "jsonld", "topojson", "kml", "gpx", "tcx", "gml", "osm", "prj", "cpg",
-        "qgs", "mif", "vhdr", "vmrk", "lay", "obs", "rinex", "sp3", "clk"
+        "qgs", "mif", "vhdr", "vmrk", "lay", "obs", "rinex", "sp3", "clk",
+        "ldif", "vcard", "nws", "jsonl", "psv", "hl7", "sami", "jss", "mpl2", "qtxt", "bookmark",
+        "gtf", "gff", "gff3", "bed", "fasta", "fa", "fna", "faa", "fastq", "fq", "mzml", "mzxml",
+        "qml", "sld", "gitattributes", "gitmodules", "gitconfig", "dockerignore", "editorconfig",
+        "clang-format", "clang-tidy", "eslintrc", "prettierrc", "stylelintrc", "babelrc",
+        "pylintrc", "flake8", "coveragerc"
     )
 
     fun catOf(fileName: String, mime: String = "", isDir: Boolean = false): Cat {
@@ -949,6 +962,76 @@ object TypeDetect {
 
     private fun more6Label(e: String): String? = EXT_LABEL_MORE6[e]
 
+    private val EXT_LABEL_MORE7 = mapOf(
+        // —— 办公 / 出版 / 邮件 / 电子书 ——
+        "indt" to "InDesign 模板", "indb" to "InDesign 图书", "qxp" to "QuarkXPress 工程",
+        "vsdm" to "Visio 宏绘图", "vssx" to "Visio 模具", "vstx" to "Visio 模板",
+        "vssm" to "Visio 宏模具", "vstm" to "Visio 宏模板", "mpt" to "Project 模板",
+        "mpx" to "Project 交换文件", "onepkg" to "OneNote 包",
+        "dbx" to "Outlook Express 邮件库", "msf" to "Thunderbird 邮件索引",
+        "emlx" to "Apple Mail 邮件", "olk14" to "Outlook Mac 邮件库", "olk15" to "Outlook Mac 邮件库",
+        "ldif" to "LDIF 目录数据", "vcard" to "vCard 联系人", "nws" to "Windows Mail 邮件",
+        "tpz" to "Topaz 电子书", "topaz" to "Topaz 电子书", "imp" to "Impression 电子书",
+        "hlv" to "Hiebook 电子书", "lrs" to "索尼 LRS 电子书", "lrx" to "索尼 LRX 电子书",
+        "ebk" to "eBook 电子书", "mbp" to "Mobipocket 笔记",
+
+        // —— 视频 / 音频 ——
+        "m2p" to "MPEG-2 视频", "ps" to "MPEG 程序流 / PostScript 文档", "mpe" to "MPEG 视频",
+        "r3d" to "RED 摄像机视频", "braw" to "Blackmagic RAW 视频", "ari" to "ARRIRAW 视频",
+        "ism" to "Smooth Streaming 清单", "f4m" to "Adobe HDS 清单",
+        "mp2" to "MP2 音频", "mpa" to "MPEG 音频", "tak" to "TAK 无损音频",
+        "ofr" to "OptimFROG 音频", "ofs" to "OptimFROG 流", "dss" to "DSS 录音",
+        "ds2" to "DS2 录音", "msv" to "Memory Stick 录音", "vox" to "VOX 语音",
+        "sam" to "SAM 音频", "slk" to "SILK 音频 / SYLK 表格",
+        "dct" to "DCT 录音", "cda" to "CD 音轨", "ram" to "RealAudio 链接",
+
+        // —— 数据 / 数据库 / GIS ——
+        "jsonl" to "JSON Lines 数据", "psv" to "竖线分隔数据", "sqlitedb" to "SQLite 数据库",
+        "db4" to "SQLite 数据库", "fmp12" to "FileMaker 12 数据库", "fp7" to "FileMaker 7 数据库",
+        "4dd" to "4D 数据库", "rdb" to "Redis 快照", "aof" to "Redis 追加日志",
+        "sst" to "LevelDB 表文件", "h2.db" to "H2 数据库", "mv.db" to "H2 MVStore 数据库",
+        "qix" to "MapInfo 空间索引", "qml" to "QGIS 图层样式", "sld" to "OGC 样式描述",
+        "gdb" to "ESRI 文件地理数据库",
+
+        // —— 生物 / 医学 / 科学 ——
+        "bam" to "BAM 比对数据", "bai" to "BAM 索引", "cram" to "CRAM 压缩比对数据",
+        "gtf" to "GTF 基因注释", "gff" to "GFF 基因注释", "gff3" to "GFF3 基因注释",
+        "bed" to "BED 基因组区间", "bigwig" to "BigWig 基因组轨道", "bw" to "BigWig 基因组轨道",
+        "fasta" to "FASTA 序列", "fa" to "FASTA 序列", "fna" to "FASTA 核酸序列", "faa" to "FASTA 蛋白序列",
+        "fastq" to "FASTQ 测序数据", "fq" to "FASTQ 测序数据",
+        "mzml" to "mzML 质谱数据", "mzxml" to "mzXML 质谱数据", "wiff" to "SCIEX 质谱数据",
+        "hl7" to "HL7 医疗消息", "nirs" to "NIRS 近红外数据",
+
+        // —— 3D / CAD ——
+        "lwo" to "LightWave 模型", "lws" to "LightWave 场景", "geo" to "Geometry 模型",
+        "mtl" to "OBJ 材质库", "x3dv" to "X3D VRML 模型", "off" to "OFF 3D 网格",
+        "jt" to "JT 3D 模型",
+
+        // —— 图像 / 矢量 ——
+        "cpt" to "Corel Photo-Paint 图像", "pat" to "Photoshop 图案", "grd" to "Photoshop 渐变",
+        "svgz" to "压缩 SVG 矢量图", "emf" to "EMF 矢量图", "wmf" to "WMF 矢量图",
+        "cgm" to "CGM 矢量图", "fh11" to "FreeHand 11 图形", "fh10" to "FreeHand 10 图形",
+
+        // —— 压缩 / 安全 / 安装 / 配置 ——
+        "lzx" to "LZX 压缩文件", "winzip" to "WinZip 压缩包", "zoo" to "Zoo 压缩包",
+        "bz" to "BZIP2 压缩文件", "tb2" to "TAR.BZ2 压缩包", "tlz" to "TAR.LZMA 压缩包",
+        "txz" to "TAR.XZ 压缩包", "kpdx" to "KeePass 1.x 数据库",
+        "enc" to "加密文件", "crypt" to "加密文件", "locked" to "锁定文件",
+        "gitattributes" to "Git 属性配置", "gitmodules" to "Git 子模块配置",
+        "gitconfig" to "Git 配置", "dockerignore" to "Docker 忽略清单",
+        "editorconfig" to "EditorConfig 配置", "clang-format" to "clang-format 配置",
+        "clang-tidy" to "clang-tidy 配置", "eslintrc" to "ESLint 配置",
+        "prettierrc" to "Prettier 配置", "stylelintrc" to "Stylelint 配置",
+        "babelrc" to "Babel 配置", "pylintrc" to "Pylint 配置",
+        "flake8" to "Flake8 配置", "coveragerc" to "Coverage 配置",
+
+        // —— 字幕 / 快捷方式 ——
+        "sami" to "SAMI 字幕", "jss" to "JSS 字幕", "mpl2" to "MPL2 字幕",
+        "qtxt" to "QT 文本字幕", "bookmark" to "浏览器书签", "desktop" to "Linux 桌面入口"
+    )
+
+    private fun more7Label(e: String): String? = EXT_LABEL_MORE7[e]
+
     /** 两段/三段组合后缀的完整说明，详情和列表都用这个 */
     private val COMPOUND_LABEL = mapOf(
         "tar.gz" to "TAR.GZ 压缩包", "tar.bz2" to "TAR.BZ2 压缩包", "tar.xz" to "TAR.XZ 压缩包",
@@ -988,7 +1071,8 @@ object TypeDetect {
         "pyproject.toml" to "Python 项目配置", "poetry.lock" to "Poetry 锁定文件",
         "composer.json" to "Composer 包描述", "composer.lock" to "Composer 锁定文件",
         "Gemfile.lock" to "Bundler 锁定文件", "Podfile.lock" to "CocoaPods 锁定文件",
-        "docker-compose.yml" to "Docker Compose 配置", "docker-compose.yaml" to "Docker Compose 配置"
+        "docker-compose.yml" to "Docker Compose 配置", "docker-compose.yaml" to "Docker Compose 配置",
+        "h2.db" to "H2 数据库", "mv.db" to "H2 MVStore 数据库"
     ) + (1..99).associate { "%03d".format(it) to "分卷 / 拆分文件（第 $it 卷）" } +
         (0..99).associate { "r%02d".format(it) to "RAR 分卷（第 $it 卷）" } +
         (1..99).associate { "z%02d".format(it) to "ZIP 分卷（第 $it 卷）" }
@@ -1047,6 +1131,7 @@ object TypeDetect {
         more4Label(e)?.let { return it }
         more5Label(e)?.let { return it }
         more6Label(e)?.let { return it }
+        more7Label(e)?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"
