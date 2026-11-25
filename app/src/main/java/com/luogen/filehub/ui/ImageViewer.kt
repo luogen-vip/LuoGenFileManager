@@ -321,8 +321,16 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
     var filt by remember { mutableStateOf(AppState.searchFilt) }
     var excluded by remember { mutableStateOf(AppState.searchExcluded) }
     var showExclude by remember { mutableStateOf(false) }
+
+    fun clearSearch() {
+        query = ""
+        AppState.searchQuery = ""
+        AppState.searchResultsFor = ""
+        AppState.searchResults = emptyList()
+    }
+
     // 搜索页返回：先清空搜索词，回到输入前的内容；再按才退出这一页
-    BackHandler(enabled = query.isNotBlank()) { query = "" }
+    BackHandler(enabled = query.isNotBlank()) { clearSearch() }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) {
@@ -414,7 +422,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = {
-                        if (query.isNotBlank()) query = "" else nav.pop()
+                        if (query.isNotBlank()) clearSearch() else nav.pop()
                     }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
                     Row(
                         Modifier
@@ -430,7 +438,10 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                         Box(Modifier.weight(1f)) {
                             BasicTextField(
                                 value = query,
-                                onValueChange = { query = it },
+                                onValueChange = {
+                                    query = it
+                                    AppState.searchQuery = it.trim()
+                                },
                                 singleLine = true,
                                 modifier = Modifier.focusRequester(focus),
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 14.sp)
@@ -438,7 +449,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                             if (query.isEmpty()) Text("搜索全部文件", color = TextDim, fontSize = 13.sp)
                         }
                         if (query.isNotEmpty()) {
-                            Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable { query = "" })
+                            Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable { clearSearch() })
                         }
                     }
                 }

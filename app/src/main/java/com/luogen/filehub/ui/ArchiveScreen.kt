@@ -1,6 +1,7 @@
 package com.luogen.filehub.ui
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -44,9 +45,15 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
     var showDest by remember { mutableStateOf(false) }
     var prog by remember { mutableStateOf<Prog?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
-    var filter by remember { mutableStateOf("") }
+    var filter by remember(path) { mutableStateOf(AppState.archiveFilter(path)) }
     var pendingEntry by remember { mutableStateOf<ArchiveEntry?>(null) }
     var doneDir by remember { mutableStateOf<String?>(null) }
+
+    fun clearFilter() {
+        filter = ""
+        AppState.setArchiveFilter(path, "")
+    }
+    BackHandler(enabled = filter.isNotBlank()) { clearFilter() }
 
     LaunchedEffect(path) {
         withContext(Dispatchers.IO) {
@@ -115,7 +122,11 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
                             )
                         }
                     },
-                    navigationIcon = { IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) } },
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            if (filter.isNotBlank()) clearFilter() else nav.pop()
+                        }) { Icon(Icons.Filled.ArrowBack, null, tint = TextMain) }
+                    },
                     actions = {
                         IconButton(onClick = {
                             FileOps.share(ctx, listOf(FileItem(path = path, name = file.name, mime = "application/octet-stream")))
@@ -138,7 +149,10 @@ fun ArchiveViewerScreen(ctx: Context, nav: NavStack, path: String) {
                     Box(Modifier.weight(1f)) {
                         BasicTextField(
                             value = filter,
-                            onValueChange = { filter = it },
+                            onValueChange = {
+                                filter = it
+                                AppState.setArchiveFilter(path, it)
+                            },
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(color = TextMain, fontSize = 13.sp)
                         )

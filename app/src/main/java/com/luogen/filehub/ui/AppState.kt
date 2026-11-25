@@ -75,6 +75,13 @@ object AppState {
         if (q.isBlank()) browseQueries.remove(owner + "|" + path) else browseQueries[owner + "|" + path] = q
     }
 
+    // ---------- 压缩包内条目搜索 ----------
+    private val archiveFilters = HashMap<String, String>()
+    fun archiveFilter(path: String): String = archiveFilters[path] ?: ""
+    fun setArchiveFilter(path: String, q: String) {
+        if (q.isBlank()) archiveFilters.remove(path) else archiveFilters[path] = q
+    }
+
     // ---------- 列表数据缓存 ----------
     private val lists = HashMap<String, List<FileItem>>()
     private val listsAt = HashMap<String, Long>()

@@ -116,6 +116,7 @@ fun BrowseScreen(
         val q = AppState.browseQuery(stateKey, dir.absolutePath)
         query = q
         current = dir
+        AppState.setBrowseCurrent(stateKey, dir.absolutePath)
     }
 
     fun goParent() {
@@ -124,6 +125,7 @@ fun BrowseScreen(
         val q = AppState.browseQuery(stateKey, parent.absolutePath)
         query = q
         current = parent
+        AppState.setBrowseCurrent(stateKey, parent.absolutePath)
     }
 
     LaunchedEffect(stateKey, current.absolutePath) {
