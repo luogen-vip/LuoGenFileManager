@@ -45,6 +45,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/** 文件夹：目录的 File.length() 恒为 0，不能拿 0 B 当真实大小；兼容 MediaStore 目录行 */
+fun isFolder(item: FileItem): Boolean =
+    item.isDir || (item.size == 0L && item.path.isNotEmpty() && try { File(item.path).isDirectory } catch (_: Throwable) { false })
+
 fun catIcon(cat: Cat): ImageVector = when (cat) {
     Cat.IMAGE -> Icons.Filled.Photo
     Cat.VIDEO -> Icons.Filled.Videocam
@@ -414,8 +418,9 @@ fun FileRow(
             Spacer(Modifier.height(3.dp))
             Text(
                 buildString {
-                    append(item.size.toSizeText())
-                    if (!item.isDir && item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime, java.io.File(item.path)))
+                    val folder = isFolder(item)
+                    append(if (folder) "文件夹" else item.size.toSizeText())
+                    if (!folder && item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime, java.io.File(item.path)))
                     append(" · ").append(item.modified.toRelativeTime())
                 },
                 color = TextDim,

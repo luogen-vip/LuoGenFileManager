@@ -55,13 +55,20 @@ class FileRepo(private val ctx: Context) {
                     val name = if (nameIdx >= 0) c.getString(nameIdx) ?: "" else ""
                     val data = if (dataIdx >= 0) c.getString(dataIdx) ?: "" else ""
                     if (data.isEmpty()) continue
+                    val size = if (sizeIdx >= 0) c.getLong(sizeIdx) else 0L
+                    val mime = if (mimeIdx >= 0) c.getString(mimeIdx) ?: "" else ""
+                    // 文件夹在 MediaStore 里的 SIZE 也是 0；只在 size=0 时做一次目录判断，
+                    // 既不把文件夹当 0 B 文件展示，也不给一万多个正常文件逐个加 stat
+                    val isDir = mime == "vnd.android.document/directory" ||
+                        (size == 0L && try { File(data).isDirectory } catch (_: Throwable) { false })
                     out.add(
                         FileItem(
                             path = data,
                             name = name.ifEmpty { File(data).name },
-                            size = if (sizeIdx >= 0) c.getLong(sizeIdx) else 0L,
+                            size = size,
                             modified = (if (dateIdx >= 0) c.getLong(dateIdx) else 0L) * 1000L,
-                            mime = if (mimeIdx >= 0) c.getString(mimeIdx) ?: "" else "",
+                            mime = mime,
+                            isDir = isDir,
                             id = if (idIdx >= 0) c.getLong(idIdx).toString() else data
                         )
                     )
@@ -136,8 +143,8 @@ class FileRepo(private val ctx: Context) {
     ).filter { !it.isDir && File(it.path).isFile }
         .map { it.copy(modified = File(it.path).lastModified().takeIf { m -> m > 0 } ?: it.modified) }
 
-    private val docFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.DOC_EXT }
-    private val archiveFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.ARCHIVE_EXT && it.ext != "apk" }
+    private val docFilter: (FileItem) -> Boolean = { !it.isDir && it.ext in TypeDetect.DOC_EXT }
+    private val archiveFilter: (FileItem) -> Boolean = { !it.isDir && it.ext in TypeDetect.ARCHIVE_EXT && it.ext != "apk" }
     private val apkFilter: (FileItem) -> Boolean = { it.ext == "apk" }
 
     fun docs(): List<FileItem> = allMediaFiles().filter(docFilter)

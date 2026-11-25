@@ -596,12 +596,13 @@ fun BrowseScreen(
     showInfo?.let { item ->
         InfoDialog(title = item.name, rows = listOf(
             "名称" to item.name,
-            "大小" to item.size.toSizeText(),
+            "大小" to if (isFolder(item)) "文件夹（不统计总大小）" else item.size.toSizeText(),
             "路径" to item.path,
-            "类型" to if (item.isDir) "文件夹" else com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime),
-            "分类" to if (item.isDir) "文件夹" else com.luogen.filehub.data.TypeDetect.catOf(item.name, item.mime).title,
-            "扩展名" to (if (item.isDir) "无" else item.ext.uppercase().ifEmpty { "无" })
-        ), onCopy = { clipboard.setText(AnnotatedString(it)); toast = "已复制" }, onDismiss = { showInfo = null })
+            "类型" to if (isFolder(item)) "文件夹" else com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime),
+            "分类" to if (isFolder(item)) "文件夹" else com.luogen.filehub.data.TypeDetect.catOf(item.name, item.mime).title,
+            "扩展名" to (if (isFolder(item)) "无" else item.ext.uppercase().ifEmpty { "无" })
+        ), onCopy = { clipboard.setText(AnnotatedString(it)); toast = "已复制" }, onDismiss = { showInfo = null },
+            folderToMeasure = if (isFolder(item)) File(item.path) else null)
     }
 
     prog?.let { ProgressDialog(it.title, it.progress, it.msg) }

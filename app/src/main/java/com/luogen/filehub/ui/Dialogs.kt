@@ -19,6 +19,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
+import com.luogen.filehub.model.toSizeText
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.extOf
@@ -314,14 +318,32 @@ fun InfoDialog(
     title: String,
     rows: List<Pair<String, String>>,
     onCopy: ((String) -> Unit)? = null,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    folderToMeasure: File? = null
 ) {
+    var folderSize by remember(folderToMeasure?.absolutePath) { mutableStateOf<Long?>(null) }
+    var folderDone by remember(folderToMeasure?.absolutePath) { mutableStateOf(false) }
+    LaunchedEffect(folderToMeasure?.absolutePath) {
+        if (folderToMeasure != null) {
+            folderSize = withContext(Dispatchers.IO) { FileOps.sizeOfOrNull(folderToMeasure) }
+            folderDone = true
+        }
+    }
+    val actualRows = if (folderToMeasure == null) rows else rows.map { (k, v) ->
+        if (k == "大小") {
+            k to when {
+                !folderDone -> "正在计算…"
+                folderSize != null -> folderSize!!.toSizeText()
+                else -> "无法读取（权限不足或文件夹已不存在）"
+            }
+        } else k to v
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontSize = 16.sp) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                rows.forEach { (k, v) ->
+                actualRows.forEach { (k, v) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
                         Text(k, color = TextDim, fontSize = 12.sp, modifier = Modifier.width(84.dp))
                         Text(v, fontSize = 13.sp, modifier = Modifier.weight(1f))

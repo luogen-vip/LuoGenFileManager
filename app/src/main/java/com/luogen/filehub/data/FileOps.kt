@@ -59,6 +59,19 @@ object FileOps {
         s
     } else f.length()
 
+    /** 文件夹真实总大小；读不到（权限/路径消失）返回 null，避免把 0 B 当成真实大小 */
+    fun sizeOfOrNull(f: File, depth: Int = 0): Long? {
+        if (depth > 64 || !f.exists()) return null
+        if (!f.isDirectory) return f.length()
+        val kids = try { f.listFiles() } catch (_: Throwable) { null } ?: return null
+        var total = 0L
+        for (k in kids) {
+            val part = sizeOfOrNull(k, depth + 1) ?: return null
+            total += part
+        }
+        return total
+    }
+
     fun copy(items: List<FileItem>, destDir: File, onProgress: (Long, Long, String) -> Unit = { _, _, _ -> }): Int {
         val total = items.sumOf { sizeOf(File(it.path)) }
         var done = 0L

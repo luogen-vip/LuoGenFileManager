@@ -770,7 +770,8 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                 clipboard.setText(AnnotatedString(it))
                 toast = "路径已复制"
             },
-            onDismiss = { showInfo = null }
+            onDismiss = { showInfo = null },
+            folderToMeasure = if (isFolder(item)) File(item.path) else null
         )
     }
 
@@ -1058,10 +1059,11 @@ private fun infoRows(item: FileItem): List<Pair<String, String>> {
     if (item.label.isNotEmpty()) rows.add("应用名" to item.label)
     if (item.packageName.isNotEmpty()) rows.add("包名" to item.packageName)
     if (item.versionName.isNotEmpty()) rows.add("版本" to item.versionName)
-    rows.add("大小" to item.size.toSizeText())
+    val folder = isFolder(item)
+    rows.add("大小" to if (folder) "文件夹（不统计总大小）" else item.size.toSizeText())
     if (item.modified > 0) rows.add("修改时间" to item.modified.toFullTime())
-    if (item.ext.isNotEmpty()) rows.add("扩展名" to item.ext.uppercase())
-    rows.add("文件类型" to TypeDetect.labelOf(item.name, item.mime))
+    if (!folder && item.ext.isNotEmpty()) rows.add("扩展名" to item.ext.uppercase())
+    rows.add("文件类型" to if (folder) "文件夹" else TypeDetect.labelOf(item.name, item.mime))
     if (item.path.isNotEmpty()) rows.add("完整路径" to item.path)
     val f = File(item.path)
     if (f.exists() && !f.isDirectory) {
