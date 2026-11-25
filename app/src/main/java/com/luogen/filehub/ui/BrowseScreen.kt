@@ -152,7 +152,13 @@ fun BrowseScreen(
         delay(220)
         if (loadedPath != current.absolutePath) showSpinner = true
     }
-    LaunchedEffect(current.absolutePath, refresh) {
+    LaunchedEffect(AppState.dataVersion) {
+        // 任何地方下载/删除/移动/新建后，目录缓存立即作废
+        browseCache.clear()
+        refresh++
+    }
+
+    LaunchedEffect(current.absolutePath, refresh, AppState.dataVersion) {
         val path = current.absolutePath
         val changedDir = loadedPath != path
         if (changedDir) {

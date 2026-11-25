@@ -35,6 +35,12 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("open_ftp", false) == true) AppState.ftpOpenRequested = true
         super.onCreate(savedInstanceState)
         Prefs.init(this)
+        // 文件变化监听：下载/删除/移动/新建后界面立刻刷新，不靠手动刷新或杀后台
+        try {
+            com.luogen.filehub.data.MediaWatcher.start(this) {
+                AppState.markDataChanged()
+            }
+        } catch (_: Throwable) {}
         // 先把上次的播放队列接回来，再恢复导航，播放页才知道该回到哪首歌
         try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         // 进程被清理后重新打开：导航栈回到上次的位置，而不是永远回首页
@@ -58,6 +64,27 @@ class MainActivity : ComponentActivity() {
             Prefs.flush()
         } catch (_: Throwable) {}
         super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        try {
+            com.luogen.filehub.data.MediaWatcher.start(this) {
+                AppState.markDataChanged()
+            }
+        } catch (_: Throwable) {}
+        // 在别的 App 下载/删除/移动后回到本 App：立刻清缓存重读
+        try { AppState.markDataChanged() } catch (_: Throwable) {}
+    }
+
+    override fun onStop() {
+        try { com.luogen.filehub.data.MediaWatcher.stop() } catch (_: Throwable) {}
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        try { com.luogen.filehub.data.MediaWatcher.stop() } catch (_: Throwable) {}
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

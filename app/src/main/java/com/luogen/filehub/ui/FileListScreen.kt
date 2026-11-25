@@ -104,9 +104,9 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
         }
     }
 
-    LaunchedEffect(cacheKey, force) {
+    LaunchedEffect(cacheKey, force, AppState.dataVersion) {
         // 收藏 / 回收站永远读真实数据，不吃缓存：收藏完、彻底删除完进来必须立刻是真实内容
-        val alwaysFresh = cat == Cat.FAV || cat == Cat.TRASH
+        val alwaysFresh = cat == Cat.FAV || cat == Cat.TRASH || cat == Cat.DOWNLOAD || cat == Cat.APP
         if (alwaysFresh) AppState.drop(cacheKey)
         if (AppState.cached(cacheKey) == null) loading = true
         val pair = AppState.load(cacheKey, force = force > 0 || alwaysFresh, ttlMs = 3 * 60 * 1000L) {

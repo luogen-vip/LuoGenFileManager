@@ -10,3 +10,6 @@ build/
 
 # 本地成品包目录
 release/
+
+# Kotlin 本地缓存
+.kotlin/

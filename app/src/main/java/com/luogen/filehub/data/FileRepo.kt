@@ -128,12 +128,12 @@ class FileRepo(private val ctx: Context) {
         return out.distinctBy { it.path }.take(limit)
     }
 
-    /** 最近文件（按修改时间倒序） */
+    /** 最近文件（按修改时间倒序）；已经不存在的条目直接剔除 */
     fun recent(limit: Int = 200): List<FileItem> = query(
         MediaStore.Files.getContentUri("external"),
         sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
         limit = limit
-    )
+    ).filter { !it.isDir && File(it.path).isFile }
 
     private val docFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.DOC_EXT }
     private val archiveFilter: (FileItem) -> Boolean = { it.ext in TypeDetect.ARCHIVE_EXT && it.ext != "apk" }
@@ -141,17 +141,31 @@ class FileRepo(private val ctx: Context) {
 
     fun docs(): List<FileItem> = allMediaFiles().filter(docFilter)
     fun archives(): List<FileItem> = allMediaFiles().filter(archiveFilter)
-    fun apkFiles(): List<FileItem> = allMediaFiles().filter(apkFilter)
+
+    /** 只查 .apk，避免每次刷新都把一万多条媒体记录全扫一遍；同时剔除已被删掉的文件 */
+    fun apkFiles(): List<FileItem> = query(
+        MediaStore.Files.getContentUri("external"),
+        selection = "LOWER(${MediaStore.MediaColumns.DISPLAY_NAME}) LIKE ?",
+        selectionArgs = arrayOf("%.apk"),
+        sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+    ).filter { File(it.path).isFile }
 
     /** 下载：Download 集合 + 最近 30 天新增文件（全盘，不限目录），按时间倒序 */
     fun downloads(): List<FileItem> {
         val map = LinkedHashMap<String, FileItem>()
         if (Build.VERSION.SDK_INT >= 29) {
-            query(MediaStore.Downloads.EXTERNAL_CONTENT_URI).forEach { map[it.path] = it }
+            query(MediaStore.Downloads.EXTERNAL_CONTENT_URI)
+                .forEach { if (File(it.path).isFile) map[it.path] = it }
         }
-        val cutoff = System.currentTimeMillis() - 30L * 24 * 3600 * 1000
-        allMediaFiles().forEach {
-            if (it.modified >= cutoff) map[it.path] = it
+        val cutoffSec = (System.currentTimeMillis() - 30L * 24 * 3600 * 1000) / 1000L
+        // 只让 SQL 返回最近 30 天的行，避免全表扫完再做 File.exists
+        query(
+            MediaStore.Files.getContentUri("external"),
+            selection = "${MediaStore.MediaColumns.DATE_MODIFIED} >= ?",
+            selectionArgs = arrayOf(cutoffSec.toString()),
+            sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        ).forEach {
+            if (File(it.path).isFile) map[it.path] = it
         }
         return map.values.sortedByDescending { it.modified }
     }
