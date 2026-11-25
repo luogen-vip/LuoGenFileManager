@@ -38,9 +38,10 @@ object AudioHub {
     private var session: MediaSession? = null
     private var appCtx: Context? = null
 
-    var playlist: List<String> = emptyList()
+    // 播放队列：会用 mutableState 暴露给界面，加入/删除歌曲后列表立刻刷新
+    var playlist by mutableStateOf<List<String>>(emptyList())
         private set
-    var index: Int = 0
+    var index by mutableStateOf(0)
         private set
     var playing by mutableStateOf(false)
         private set
@@ -196,18 +197,88 @@ object AudioHub {
         refreshNotification()
     }
 
+    /** 手动下一曲：单曲循环时也要真的换到下一首，不能原地重播当前这首 */
     fun next() {
         val p = player ?: return
-        if (p.mediaItemCount == 0) return
-        if (p.hasNextMediaItem()) p.seekToNextMediaItem() else p.seekTo(0, 0)
+        val count = p.mediaItemCount
+        if (count == 0) return
+        val cur = p.currentMediaItemIndex.coerceIn(0, count - 1)
+        if (shuffleOn) {
+            p.seekToNextMediaItem()
+        } else {
+            val target = if (cur + 1 < count) cur + 1 else 0
+            p.seekTo(target, 0)
+        }
         p.play()
+        pushState()
+        refreshNotification()
     }
 
+    /** 手动上一曲：同样不受单曲循环影响 */
     fun prev() {
         val p = player ?: return
-        if (p.mediaItemCount == 0) return
-        if (p.hasPreviousMediaItem()) p.seekToPreviousMediaItem() else p.seekTo(p.mediaItemCount - 1, 0)
+        val count = p.mediaItemCount
+        if (count == 0) return
+        val cur = p.currentMediaItemIndex.coerceIn(0, count - 1)
+        if (shuffleOn) {
+            p.seekToPreviousMediaItem()
+        } else {
+            val target = if (cur - 1 >= 0) cur - 1 else count - 1
+            p.seekTo(target, 0)
+        }
         p.play()
+        pushState()
+        refreshNotification()
+    }
+
+    /** 把一批音频追加到当前播放列表；队列为空时直接开始播第一首 */
+    fun enqueue(paths: List<String>, ctx: Context): Int {
+        val valid = paths.filter { it.isNotBlank() }
+        if (valid.isEmpty()) return 0
+        val p = ensure(ctx)
+        if (playlist.isEmpty()) {
+            play(valid, 0, ctx)
+            return valid.size
+        }
+        val existing = playlist.toSet()
+        val add = valid.filter { it !in existing }
+        if (add.isEmpty()) return 0
+        // 播放器队列被系统清过，先把原队列补回去再追加
+        if (p.mediaItemCount == 0) {
+            playlist.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
+            p.seekTo(index.coerceIn(0, playlist.lastIndex), 0)
+            p.prepare()
+        }
+        add.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
+        playlist = playlist + add
+        p.shuffleModeEnabled = shuffleOn
+        pushState()
+        refreshNotification()
+        return add.size
+    }
+
+    /** 从播放列表删除一首；删的是当前曲目时播放器会自动切到下一首 */
+    fun removeAt(pos: Int) {
+        if (pos !in playlist.indices) return
+        val p = player
+        playlist = playlist.toMutableList().also { it.removeAt(pos) }
+        if (playlist.isEmpty()) {
+            p?.clearMediaItems()
+            p?.pause()
+            index = 0
+            playing = false
+        } else {
+            if (p != null && pos < p.mediaItemCount) p.removeMediaItem(pos)
+            index = index.coerceIn(0, playlist.lastIndex)
+        }
+        pushState()
+        refreshNotification()
+    }
+
+    /** 从播放列表点某一首直接播放 */
+    fun playQueueAt(pos: Int, ctx: Context) {
+        if (pos !in playlist.indices) return
+        play(playlist, pos, ctx)
     }
 
     fun seekTo(ms: Long) {
@@ -221,13 +292,19 @@ object AudioHub {
         player?.shuffleModeEnabled = on
     }
 
+    /**
+     * 顺序播放 -> 单曲循环 -> 随机播放 -> 顺序播放。
+     * 不再单独放一个“列表循环”和“随机”按钮，避免用户分不清两者区别。
+     */
     fun cycleRepeat(): Int {
         repeatMode = (repeatMode + 1) % 3
-        player?.repeatMode = when (repeatMode) {
-            1 -> Player.REPEAT_MODE_ONE
-            2 -> Player.REPEAT_MODE_ALL
-            else -> Player.REPEAT_MODE_OFF
+        shuffleOn = repeatMode == 2
+        player?.let { p ->
+            p.shuffleModeEnabled = shuffleOn
+            p.repeatMode = if (repeatMode == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         }
+        pushState()
+        refreshNotification()
         return repeatMode
     }
 

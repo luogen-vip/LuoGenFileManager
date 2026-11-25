@@ -12,21 +12,24 @@ object TypeDetect {
         "tif", "tiff", "ico", "jfif", "dng", "raw", "cr2", "nef", "arw", "orf", "raf", "svg",
         "psd", "psb", "xcf", "tga", "webp2", "hdr", "exr", "jxl", "jp2", "j2k", "pbm", "pgm", "ppm", "xbm", "wbmp",
         "apng", "jpe", "cur", "ani", "icns", "heics", "avifs", "dds",
-        "cr3", "crw", "dc2", "dcr", "k25", "kdc", "mos", "mrw", "pef", "srw", "x3f", "rw2", "erf", "mef", "iiq", "3fr"
+        "cr3", "crw", "dc2", "dcr", "k25", "kdc", "mos", "mrw", "pef", "srw", "x3f", "rw2", "erf", "mef", "iiq", "3fr",
+        "pnm", "pcx", "sgi", "rgba", "dpx", "cin", "qoi", "hdr", "exr"
     )
 
     val VIDEO_EXT = setOf(
         "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "3gp", "ts",
         "rmvb", "rm", "mpg", "mpeg", "vob", "asf", "ogv", "m2ts", "f4v", "divx", "mts",
         "mxf", "m2v", "m1v", "3g2", "3gpp", "qt", "yuv", "h264", "h265", "hevc", "vp9", "av1", "ts",
-        "m3u8", "mpd", "dv", "f4p", "ogm", "rmhd", "swf", "viv", "amv", "cavs"
+        "m3u8", "mpd", "dv", "f4p", "ogm", "rmhd", "swf", "viv", "amv", "cavs",
+        "mpv", "y4m", "ivf", "264", "265", "vp8", "vvc"
     )
 
     val AUDIO_EXT = setOf(
         "mp3", "wav", "flac", "aac", "m4a", "ogg", "oga", "opus", "wma", "amr",
         "ape", "aiff", "aif", "mid", "midi", "mka", "ac3", "dts", "m4b", "caf", "ra",
         "m4r", "amr-wb", "awb", "tta", "wv", "mpc", "spx", "gsm", "voc", "au", "snd", "3ga", "aob",
-        "aifc", "mp4a", "dsf", "dff", "m3u", "pls", "xspf", "wpl", "cue", "kar", "smf", "mod", "xm", "it", "s3m"
+        "aifc", "mp4a", "dsf", "dff", "m3u", "pls", "xspf", "wpl", "cue", "kar", "smf", "mod", "xm", "it", "s3m",
+        "eac3", "thd", "mlp", "m4b", "m4r"
     )
 
     val DOC_EXT = setOf(
@@ -52,7 +55,8 @@ object TypeDetect {
         "docm", "dotm", "docxf", "xlsm", "xltm", "xlam", "pptm", "potm", "ppam", "ppsx", "ppsm",
         "sldx", "sldm", "pages", "numbers", "key", "hwp", "hwpx", "wps", "et", "dps", "ofd",
         "xps", "oxps", "one", "onetoc2", "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr",
-        "cb7", "djvu", "lit", "tex", "ltx", "bib", "typ", "cls", "sty", "ris", "enw", "nbib"
+        "cb7", "djvu", "lit", "tex", "ltx", "bib", "typ", "cls", "sty", "ris", "enw", "nbib",
+        "sla", "scd", "kepub", "ibooks", "pdb", "xmind", "mmd", "puml", "drawio", "mpp", "gantt", "mermaid"
 
     )
 
@@ -65,7 +69,7 @@ object TypeDetect {
         "001", "7z.001", "zip.001", "bzip2", "gzip", "compress", "zoo", "ace", "pea", "sit", "sitx", "hqx",
         "aab", "apkm", "jar", "war", "ear", "aar", "bundle", "framework", "toast", "b5t", "b6t",
         "ccd", "mds", "mdf", "nrg", "cdi", "daa", "uif", "isz", "vhd", "vhdx", "vmdk", "qcow",
-        "qcow2", "ova", "ovf", "hdd", "vbox", "pvm"
+        "qcow2", "ova", "ovf", "hdd", "vbox", "pvm", "cpio", "ar", "deb", "lzma", "tlz", "z", "sfx"
 
     )
 
@@ -360,11 +364,121 @@ object TypeDetect {
 
     private fun moreLabel(e: String): String? = EXT_LABEL_MORE[e]
 
+
+    /** 第三批：影音、图像、系统、虚拟机、数据库等细分类标签 */
+    private val EXT_LABEL_MORE2 = mapOf(
+        "jp2" to "JPEG 2000 图片",
+        "j2k" to "JPEG 2000 图片",
+        "jpx" to "JPEG 2000 图片",
+        "jpm" to "JPEG 2000 图片",
+        "pnm" to "PNM 位图",
+        "pbm" to "PBM 黑白位图",
+        "pgm" to "PGM 灰度位图",
+        "ppm" to "PPM 彩色位图",
+        "pcx" to "PCX 位图",
+        "tga" to "TGA 位图",
+        "sgi" to "SGI 位图",
+        "rgba" to "SGI RGBA 位图",
+        "dpx" to "DPX 电影帧",
+        "cin" to "Cineon 电影帧",
+        "exr" to "OpenEXR 高动态图片",
+        "hdr" to "Radiance HDR 图片",
+        "m2v" to "MPEG-2 视频",
+        "m1v" to "MPEG-1 视频",
+        "mpv" to "MPEG 视频流",
+        "y4m" to "YUV4MPEG 视频",
+        "h264" to "H.264 视频流",
+        "264" to "H.264 视频流",
+        "h265" to "H.265 视频流",
+        "265" to "H.265 视频流",
+        "hevc" to "H.265 视频流",
+        "av1" to "AV1 视频流",
+        "ivf" to "AV1/VP 视频流",
+        "mka" to "Matroska 音频",
+        "ac3" to "Dolby AC-3 音频",
+        "eac3" to "Dolby E-AC-3 音频",
+        "dts" to "DTS 音频",
+        "thd" to "Dolby TrueHD 音频",
+        "mlp" to "MLP 无损音频",
+        "m4b" to "M4B 有声书",
+        "m4r" to "iPhone 铃声",
+        "opus" to "Opus 音频",
+        "ape" to "Monkey's Audio 无损",
+        "wv" to "WavPack 无损",
+        "tta" to "TTA 无损",
+        "aif" to "AIFF 音频",
+        "aiff" to "AIFF 音频",
+        "amr" to "AMR 语音",
+        "spx" to "Speex 语音",
+        "dsf" to "DSD 音频",
+        "dff" to "DSD 音频",
+        "har" to "HTTP 抓包数据",
+        "ipynb" to "Jupyter 笔记本",
+        "rmd" to "R Markdown 文档",
+        "qmd" to "Quarto 文档",
+        "xopp" to "Xournal++ 手写笔记",
+        "torrent" to "BT 种子",
+        "nzb" to "Usenet 下载任务",
+        "sfx" to "自解压压缩包",
+        "theme" to "Windows 主题",
+        "themepack" to "Windows 主题包",
+        "deskthemepack" to "Windows 桌面主题包",
+        "mui" to "Windows 多语言资源",
+        "mun" to "Windows 资源",
+        "acl" to "Windows 权限模板",
+        "pol" to "Windows 组策略模板",
+        "mobileconfig" to "Apple 配置描述文件",
+        "mobileprovision" to "iOS 描述文件",
+        "provisionprofile" to "Apple 描述文件",
+        "sla" to "Scribus 排版文档",
+        "scd" to "Scribus 文档",
+        "pub" to "Publisher 出版物",
+        "oxps" to "OpenXPS 文档",
+        "djvu" to "DjVu 扫描文档",
+        "kepub" to "Kobo 电子书",
+        "ibooks" to "Apple 电子书",
+        "pdb" to "Palm 文档",
+        "xmind" to "XMind 思维导图",
+        "mmd" to "Mermaid 图表",
+        "puml" to "PlantUML 图表",
+        "drawio" to "draw.io 图表",
+        "vsdx" to "Visio 绘图",
+        "mpp" to "Project 项目计划",
+        "gantt" to "甘特图",
+        "mermaid" to "Mermaid 图表",
+        "ldb" to "LevelDB 数据",
+        "mdb" to "Access 数据库",
+        "accdb" to "Access 数据库",
+        "db3" to "SQLite 数据库",
+        "sqlite-wal" to "SQLite 日志",
+        "sqlite-shm" to "SQLite 共享内存",
+        "frm" to "MySQL 表结构",
+        "ibd" to "MySQL 表数据",
+        "myd" to "MySQL 数据",
+        "myi" to "MySQL 索引",
+        "ndf" to "SQL Server 数据",
+        "ldf" to "SQL Server 日志",
+        "ova" to "虚拟应用包",
+        "ovf" to "虚拟系统描述",
+        "vmem" to "虚拟机内存快照",
+        "vmsn" to "VMware 快照",
+        "vmsd" to "VMware 快照配置",
+        "nvram" to "虚拟机 NVRAM",
+        "vmss" to "VMware 挂起状态",
+        "vmx" to "VMware 配置",
+        "vbox-prev" to "VirtualBox 备份配置",
+        "pvi" to "Parallels 虚拟磁盘",
+        "hdd" to "Parallels 硬盘"
+    )
+
+    private fun more2Label(e: String): String? = EXT_LABEL_MORE2[e]
+
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
         EXT_LABEL[e]?.let { return it }
         moreLabel(e)?.let { return it }
+        more2Label(e)?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"

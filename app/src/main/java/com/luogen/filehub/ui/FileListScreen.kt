@@ -40,6 +40,7 @@ import com.luogen.filehub.data.FileRepo
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.data.Sorter
 import com.luogen.filehub.data.TrashStore
+import com.luogen.filehub.data.AudioHub
 import com.luogen.filehub.data.TypeDetect
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
@@ -423,6 +424,15 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                         }
                     )
                     else -> listOf(
+                        ActionSpec("加入列表", Icons.Filled.PlaylistAdd) {
+                            val audio = selItems.filter { TypeDetect.catOf(it.name, it.mime) == Cat.AUDIO }
+                            if (audio.isEmpty()) toast = "选中的文件里没有音频"
+                            else {
+                                val n = AudioHub.enqueue(audio.map { it.path }, ctx)
+                                toast = if (n > 0) "已加入 $n 首到播放列表" else "这些歌已经在列表里了"
+                                selected = emptySet()
+                            }
+                        },
                         ActionSpec("分享", Icons.Filled.Share) { FileOps.share(ctx, selItems) },
                         ActionSpec("复制", Icons.Filled.ContentCopy) { showCopy = true },
                         ActionSpec("移动", Icons.Filled.DriveFileMove) { showMove = true },
@@ -949,6 +959,13 @@ private fun ListCell(
                             }
                         })
                     } else if (!installed) {
+                        if (TypeDetect.catOf(item.name, item.mime) == Cat.AUDIO) {
+                            DropdownMenuItem(text = { Text("加入播放列表") }, onClick = {
+                                menu = false
+                                val n = AudioHub.enqueue(listOf(item.path), ctx)
+                                onMsg(if (n > 0) "已加入播放列表" else "这首歌已经在列表里了")
+                            })
+                        }
                         DropdownMenuItem(text = { Text("重命名") }, onClick = { menu = false; onRename(item) })
                         DropdownMenuItem(text = { Text("恢复默认名") }, onClick = {
                             menu = false

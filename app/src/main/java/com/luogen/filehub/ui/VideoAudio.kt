@@ -247,8 +247,13 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     var seekDrag by remember { mutableStateOf<Float?>(null) }
     var pendingSeek by remember { mutableStateOf<Long?>(null) }
     var tick by remember { mutableStateOf(0L) }
+    var queueOpen by remember { mutableStateOf(false) }
 
     val hub = AudioHub
+    // 播放队列才是真实音源：从任何地方“加入播放列表”后，这里马上能看到新歌
+    val queuePaths = hub.playlist.ifEmpty { paths }
+    val index = hub.index.coerceIn(0, queuePaths.lastIndex.coerceAtLeast(0))
+    val currentPath = queuePaths.getOrNull(index) ?: paths[start.coerceIn(0, queuePaths.size - 1)]
     // 首次进入：如果已经在播同一首就接着看，否则从当前这首开始播
     LaunchedEffect(Unit) {
         val cur = hub.currentPath()
@@ -267,7 +272,6 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         }
     }
 
-    val index = hub.index.coerceIn(0, paths.size - 1)
     val playing = hub.playing
     val position = hub.position
     val duration = hub.duration
@@ -277,11 +281,11 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             try {
                 val dir = File(ctx.filesDir, "covers")
                 dir.mkdirs()
-                val target = File(dir, "cover_${paths[index].hashCode()}.img")
+                val target = File(dir, "cover_${currentPath.hashCode()}.img")
                 ctx.contentResolver.openInputStream(uri)?.use { ins ->
                     target.outputStream().use { fos -> ins.copyTo(fos) }
                 }
-                Prefs.setCover(paths[index], target.absolutePath)
+                Prefs.setCover(currentPath, target.absolutePath)
                 scope.launch { cover = Thumbs.load(ctx, target.absolutePath, false, 400) }
                 hub.notifyCoverChanged()
                 toast = "封面已更新（首页和通知栏同步生效）"
@@ -292,13 +296,13 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     }
 
     LaunchedEffect(index) {
-        swirl = Prefs.swirl(paths[index])
+        swirl = Prefs.swirl(currentPath)
         cover = withContext(Dispatchers.IO) {
-            val custom = Prefs.coverFor(paths[index])
+            val custom = Prefs.coverFor(currentPath)
             if (custom != null && File(custom).exists()) {
                 Thumbs.load(ctx, custom, false, 400)
             } else {
-                loadEmbeddedCover(paths[index])
+                loadEmbeddedCover(currentPath)
             }
         }
     }
@@ -322,13 +326,16 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         Spacer(Modifier.height(14.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.pop() }) { Icon(Icons.Filled.ArrowBack, null) }
+            IconButton(onClick = { queueOpen = true }) {
+                Icon(Icons.Filled.PlaylistPlay, null, tint = BrandBlue)
+            }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { coverPicker.launch("image/*") }) {
                 Icon(Icons.Filled.AddPhotoAlternate, null, tint = TextDim)
             }
             IconButton(onClick = {
                 swirl = !swirl
-                Prefs.setSwirl(paths[index], swirl)
+                Prefs.setSwirl(currentPath, swirl)
             }) { Icon(Icons.Filled.RotateRight, null, tint = if (swirl) BrandBlue else TextDim) }
         }
 
@@ -353,13 +360,13 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
 
         Spacer(Modifier.height(26.dp))
         Text(
-            nameNoExt(File(paths[index]).name),
+            nameNoExt(File(currentPath).name),
             fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            "${File(paths[index]).name.substringAfterLast('.', "").uppercase()} · ${File(paths[index]).length().toSizeText()} · ${index + 1}/${paths.size}",
+            "${File(currentPath).name.substringAfterLast('.', "").uppercase()} · ${File(currentPath).length().toSizeText()} · ${index + 1}/${queuePaths.size}",
             color = TextDim, fontSize = 12.sp
         )
 
@@ -387,9 +394,6 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
 
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { hub.setShuffle(!hub.shuffleOn) }) {
-                Icon(Icons.Filled.Shuffle, null, tint = if (hub.shuffleOn) BrandBlue else TextDim)
-            }
             IconButton(onClick = { hub.prev() }) {
                 Icon(Icons.Filled.SkipPrevious, null, tint = TextDim)
             }
@@ -401,7 +405,11 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             }
             IconButton(onClick = { hub.cycleRepeat() }) {
                 Icon(
-                    if (hub.repeatMode == 1) Icons.Filled.RepeatOne else Icons.Filled.Repeat,
+                    when (hub.repeatMode) {
+                        1 -> Icons.Filled.RepeatOne
+                        2 -> Icons.Filled.Shuffle
+                        else -> Icons.Filled.Repeat
+                    },
                     null,
                     tint = if (hub.repeatMode != 0) BrandBlue else TextDim
                 )
@@ -409,7 +417,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         }
         Spacer(Modifier.height(10.dp))
         Text(
-            when (hub.repeatMode) { 1 -> "单曲循环"; 2 -> "列表循环"; else -> "顺序播放" } + if (hub.shuffleOn) " · 随机" else "",
+            when (hub.repeatMode) { 1 -> "单曲循环"; 2 -> "随机播放"; else -> "顺序播放" },
             color = TextDim, fontSize = 11.sp, modifier = Modifier.fillMaxWidth(),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
@@ -422,6 +430,17 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         )
     }
 
+    if (queueOpen) {
+        PlayQueueDialog(
+            queue = queuePaths,
+            current = hub.index,
+            playing = hub.playing,
+            onPlay = { i -> hub.playQueueAt(i, ctx); queueOpen = false },
+            onRemove = { i -> hub.removeAt(i) },
+            onDismiss = { queueOpen = false }
+        )
+    }
+
     toast?.let {
         AlertDialog(
             onDismissRequest = { toast = null },
@@ -430,6 +449,57 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } }
         )
     }
+}
+
+@Composable
+private fun PlayQueueDialog(
+    queue: List<String>,
+    current: Int,
+    playing: Boolean,
+    onPlay: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("播放列表 · ${queue.size} 首", fontSize = 16.sp) },
+        text = {
+            if (queue.isEmpty()) {
+                Text("播放列表是空的", color = TextDim, fontSize = 13.sp)
+            } else {
+                androidx.compose.foundation.lazy.LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 420.dp)
+                ) {
+                    items(count = queue.size, key = { i -> "$i|${queue[i]}" }) { i ->
+                        val name = File(queue[i]).name
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onPlay(i) }.padding(vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (i == current) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
+                                null,
+                                tint = if (i == current) BrandBlue else TextDim,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    color = if (i == current) BrandBlue else Color.Unspecified)
+                                Text(if (i == current) (if (playing) "正在播放" else "已暂停") else "第 ${i + 1} 首",
+                                    fontSize = 10.sp, color = TextDim)
+                            }
+                            IconButton(onClick = { onRemove(i) }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Filled.Close, "从列表移除", tint = TextDim, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        HorizontalDivider(color = Color(0x14000000), thickness = 0.5.dp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+    )
 }
 
 private suspend fun loadEmbeddedCover(path: String): ImageBitmap? = withContext(Dispatchers.IO) {

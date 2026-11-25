@@ -1,6 +1,10 @@
 package com.luogen.filehub.data
 
 import com.luogen.filehub.model.extOf
+import org.apache.commons.compress.archivers.ar.ArArchiveEntry
+import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
+import org.apache.commons.compress.archivers.cpio.CpioArchiveEntry
+import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream
 import org.apache.commons.compress.archivers.sevenz.SevenZArchiveEntry
 import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import org.apache.commons.compress.archivers.sevenz.SevenZOutputFile
@@ -8,6 +12,8 @@ import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import org.apache.commons.compress.compressors.lzma.LZMACompressorInputStream
+import org.apache.commons.compress.compressors.z.ZCompressorInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import java.io.BufferedInputStream
 import java.io.File
@@ -29,7 +35,10 @@ data class ArchiveResult(
 
 object ArchiveUtil {
 
-    private val ZIPLIKE = setOf("zip", "jar", "war", "apk", "apks", "whl", "crx", "epub", "docx", "xlsx", "pptx", "odt", "ods", "odp")
+    private val ZIPLIKE = setOf(
+        "zip", "jar", "war", "ear", "aar", "apk", "apks", "aab", "apkm", "xapk", "ipa", "apkg",
+        "whl", "crx", "epub", "cbz", "cb7", "docx", "xlsx", "pptx", "odt", "ods", "odp"
+    )
     private val RARLIKE = setOf("rar")
     private val SEVENZ = setOf("7z")
     private val TARLIKE = setOf("tar")
@@ -37,11 +46,17 @@ object ArchiveUtil {
     private val BZ2LIKE = setOf("bz2", "tbz", "tbz2")
     private val XZLIKE = setOf("xz", "txz")
     private val ISOLIKE = setOf("iso")
+    private val CPIO = setOf("cpio")
+    private val ARLIKE = setOf("ar", "deb")
+    private val LZMALIKE = setOf("lzma", "tlz")
+    private val ZLIKE = setOf("z")
 
     /** 后缀不可靠时用文件头兜底：没有后缀/被改名的 zip、7z、rar 也能解 */
     private fun effExt(file: File): String {
         val e = extOf(file.name)
-        if (e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE || e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ISOLIKE) return e
+        if (e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE || e in GZLIKE || e in BZ2LIKE ||
+            e in XZLIKE || e in ISOLIKE || e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
+        ) return e
         val m = try { TypeDetect.detectByMagic(file) } catch (_: Throwable) { null }
         return when (m) {
             "zip" -> "zip"; "rar" -> "rar"; "7z" -> "7z"; "gz" -> "gz"; "bz2" -> "bz2"; "xz" -> "xz"
@@ -52,7 +67,8 @@ object ArchiveUtil {
     fun isSupported(file: File): Boolean {
         val e = effExt(file)
         return e in ZIPLIKE || e in RARLIKE || e in SEVENZ || e in TARLIKE ||
-            e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ISOLIKE
+            e in GZLIKE || e in BZ2LIKE || e in XZLIKE || e in ISOLIKE ||
+            e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE
     }
 
     fun formatName(file: File): String = effExt(file).uppercase().ifEmpty { "未知" }
@@ -69,6 +85,9 @@ object ArchiveUtil {
                 e in GZLIKE || e in BZ2LIKE || e in XZLIKE -> listCompressed(file)
                 e in RARLIKE -> listRar(file)
                 e in ISOLIKE -> listIso(file)
+                e in CPIO -> listCpio(file)
+                e in ARLIKE -> listAr(file)
+                e in LZMALIKE || e in ZLIKE -> listSingleStream(file, e)
                 else -> ArchiveResult(false, "暂不支持直接浏览该压缩格式（${formatName(file)}）")
             }
         } catch (t: Throwable) {
@@ -167,7 +186,7 @@ object ArchiveUtil {
             when (e) {
                 "gz", "tgz" -> GzipCompressorInputStream(raw, true)
                 "bz2", "tbz", "tbz2" -> BZip2CompressorInputStream(raw, true)
-                "xz", "txz" -> XZCompressorInputStream(raw, true)
+                "xz", "txz" -> XZCompressorInputStream(raw)
                 else -> null
             }
         } catch (t: Throwable) {
@@ -187,7 +206,8 @@ object ArchiveUtil {
         val e = effExt(file)
         if (!destDir.exists()) destDir.mkdirs()
         val total = when {
-            e in ZIPLIKE || e in SEVENZ || e in TARLIKE || e in RARLIKE || e in ISOLIKE || e in GZLIKE || e in BZ2LIKE || e in XZLIKE -> estimateTotal(file)
+            e in ZIPLIKE || e in SEVENZ || e in TARLIKE || e in RARLIKE || e in ISOLIKE || e in GZLIKE ||
+                e in BZ2LIKE || e in XZLIKE || e in CPIO || e in ARLIKE || e in LZMALIKE || e in ZLIKE -> estimateTotal(file)
             else -> file.length()
         }
         val done = LongArray(1)
@@ -200,6 +220,9 @@ object ArchiveUtil {
                 e in BZ2LIKE || e in XZLIKE -> extractSimpleCompressed(file, destDir, e, total, done, onProgress)
                 e in RARLIKE -> extractRar(file, destDir, total, done, onProgress)
                 e in ISOLIKE -> extractIso(file, destDir, total, done, onProgress)
+                e in CPIO -> extractCpio(file, destDir, total, done, onProgress)
+                e in ARLIKE -> extractAr(file, destDir, total, done, onProgress)
+                e in LZMALIKE || e in ZLIKE -> extractSingleStream(file, destDir, e, total, done, onProgress)
                 else -> throw IllegalArgumentException("暂不支持解压该格式（${formatName(file)}）")
             }
             ArchiveResult(true, "解压完成，共 $n 个文件", count = n)
@@ -235,6 +258,132 @@ object ArchiveUtil {
             ArchiveResult(false, "解压失败：${t.message ?: t.javaClass.simpleName}")
         }
     }
+
+    private fun listCpio(file: File): ArchiveResult {
+        val entries = ArrayList<ArchiveEntry>()
+        CpioArchiveInputStream(BufferedInputStream(FileInputStream(file))).use { cis ->
+            var e: CpioArchiveEntry? = cis.nextEntry
+            while (e != null) {
+                entries.add(ArchiveEntry(e.name, e.size.coerceAtLeast(0), e.isDirectory))
+                e = cis.nextEntry
+            }
+        }
+        return ArchiveResult(true, entries = entries, count = entries.size)
+    }
+
+    private fun listAr(file: File): ArchiveResult {
+        val entries = ArrayList<ArchiveEntry>()
+        ArArchiveInputStream(BufferedInputStream(FileInputStream(file))).use { ais ->
+            var e: ArArchiveEntry? = ais.nextEntry
+            while (e != null) {
+                entries.add(ArchiveEntry(e.name, e.length.coerceAtLeast(0), e.isDirectory))
+                e = ais.nextEntry
+            }
+        }
+        return ArchiveResult(true, entries = entries, count = entries.size)
+    }
+
+    private fun listSingleStream(file: File, e: String): ArchiveResult {
+        val inner = innerNameOf(file, e)
+        return ArchiveResult(true, entries = listOf(ArchiveEntry(inner, file.length(), false)), count = 1)
+    }
+
+    private fun innerNameOf(file: File, e: String): String {
+        val n = file.name
+        return when (e) {
+            "tlz" -> n.removeSuffix(".tlz").removeSuffix(".tar") + ".tar"
+            else -> n.substringBeforeLast('.', n)
+        }.ifEmpty { n }
+    }
+
+    private fun extractCpio(
+        file: File, dest: File, total: Long, done: LongArray,
+        onProgress: (Long, Long, String) -> Unit
+    ): Int {
+        var count = 0
+        CpioArchiveInputStream(BufferedInputStream(FileInputStream(file))).use { cis ->
+            var e: CpioArchiveEntry? = cis.nextEntry
+            val buf = ByteArray(64 * 1024)
+            while (e != null) {
+                val target = safeTarget(dest, e.name)
+                if (e.isDirectory) target.mkdirs()
+                else {
+                    target.parentFile?.mkdirs()
+                    FileOutputStream(target).use { fos ->
+                        var r = cis.read(buf)
+                        while (r > 0) {
+                            fos.write(buf, 0, r)
+                            done[0] += r
+                            onProgress(done[0], total, e.name)
+                            r = cis.read(buf)
+                        }
+                    }
+                    count++
+                }
+                e = cis.nextEntry
+            }
+        }
+        return count
+    }
+
+    private fun extractAr(
+        file: File, dest: File, total: Long, done: LongArray,
+        onProgress: (Long, Long, String) -> Unit
+    ): Int {
+        var count = 0
+        ArArchiveInputStream(BufferedInputStream(FileInputStream(file))).use { ais ->
+            var e: ArArchiveEntry? = ais.nextEntry
+            val buf = ByteArray(64 * 1024)
+            while (e != null) {
+                val target = safeTarget(dest, e.name)
+                target.parentFile?.mkdirs()
+                FileOutputStream(target).use { fos ->
+                    var r = ais.read(buf)
+                    while (r > 0) {
+                        fos.write(buf, 0, r)
+                        done[0] += r
+                        onProgress(done[0], total, e.name)
+                        r = ais.read(buf)
+                    }
+                }
+                count++
+                e = ais.nextEntry
+            }
+        }
+        return count
+    }
+
+    private fun extractSingleStream(
+        file: File, dest: File, e: String, total: Long, done: LongArray,
+        onProgress: (Long, Long, String) -> Unit
+    ): Int {
+        val raw = BufferedInputStream(FileInputStream(file))
+        val stream: InputStream = when (e) {
+            "lzma", "tlz" -> LZMACompressorInputStream(raw)
+            "z" -> ZCompressorInputStream(raw)
+            else -> raw
+        }
+        val inner = innerNameOf(file, e)
+        if (inner.endsWith(".tar", true) || e == "tlz") {
+            return extractTar(stream, dest, total, done, onProgress)
+        }
+        stream.use { ins ->
+            val target = safeTarget(dest, inner)
+            target.parentFile?.mkdirs()
+            FileOutputStream(target).use { fos ->
+                val buf = ByteArray(64 * 1024)
+                var r = ins.read(buf)
+                while (r > 0) {
+                    fos.write(buf, 0, r)
+                    done[0] += r
+                    onProgress(done[0], total, inner)
+                    r = ins.read(buf)
+                }
+            }
+        }
+        return 1
+    }
+
 
     private fun estimateTotal(file: File): Long {
         return try {
