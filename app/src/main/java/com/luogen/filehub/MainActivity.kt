@@ -209,7 +209,8 @@ class NavStack {
 
 sealed class Screen {
     object Home : Screen()
-    data class CatList(val cat: com.luogen.filehub.model.Cat) : Screen()
+    // id 让分类页在查看器返回后仍是同一个页面实例，目录/搜索状态不会丢
+    data class CatList(val cat: com.luogen.filehub.model.Cat, val id: Long = System.nanoTime()) : Screen()
     // id 让每一次“从某处点进文件夹”都是一个独立浏览页，返回不会串目录
     data class Browse(val dir: String, val id: Long = System.nanoTime()) : Screen()
     data class ImageView(val paths: List<String>, val start: Int) : Screen()
