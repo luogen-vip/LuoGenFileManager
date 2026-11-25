@@ -99,6 +99,20 @@ object FtpManager {
         stopServer()
     }
 
+    /**
+     * 运行中修改共享范围/账号设置：保存后立刻用新配置重启监听端口。
+     * 旧连接会断开，电脑端重新连接后就是新的根目录，不会继续访问旧目录。
+     */
+    fun applySettings(ctx: Context, cfg: FtpSettings): String? {
+        appCtx = ctx.applicationContext
+        Prefs.setFtpSettings(ctx, cfg)
+        if (!running) return null
+        stopServer()
+        val err = startServer(ctx)
+        refreshNotification()
+        return err
+    }
+
     /** 服务调用：真正监听端口 */
     fun startServer(ctx: Context): String? {
         appCtx = ctx.applicationContext
@@ -227,6 +241,7 @@ class FtpServer(
 ) {
     private val root = File(cfg.root).canonicalFile
     private var serverSocket: ServerSocket? = null
+    private val clientSockets = CopyOnWriteArrayList<Socket>()
     @Volatile private var alive = true
     val localIp: String = findLocalIp()
 
@@ -251,6 +266,9 @@ class FtpServer(
         alive = false
         try { serverSocket?.close() } catch (_: Throwable) {}
         serverSocket = null
+        // 旧连接必须一起断开，否则改根目录后旧会话还能访问旧范围
+        clientSockets.forEach { try { it.close() } catch (_: Throwable) {} }
+        clientSockets.clear()
     }
 
     private fun findLocalIp(): String {
@@ -272,6 +290,7 @@ class FtpServer(
     private fun handle(socket: Socket) {
         val ip = socket.inetAddress?.hostAddress ?: "未知"
         val id = ip
+        clientSockets.add(socket)
         onClient(ip, id, true)
         try {
             socket.soTimeout = 0
@@ -507,6 +526,7 @@ class FtpServer(
             }
         } catch (_: Throwable) {
         } finally {
+            clientSockets.remove(socket)
             onClient(ip, id, false)
             try { socket.close() } catch (_: Throwable) {}
         }

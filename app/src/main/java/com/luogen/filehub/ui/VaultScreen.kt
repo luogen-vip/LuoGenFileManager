@@ -434,8 +434,10 @@ fun CredentialCreatorDialog(
                                 }) { Text("完成") }
                             }
                         }
-                        if (looksWeak(pin)) {
-                            Text("⚠️ 这个密码比较简单，容易被猜到，建议之后再加一个备用方式。", color = WarnAmber, fontSize = 11.sp)
+                        if (pin.length >= 4 && looksWeak(pin)) {
+                            Text("⚠️ 这个密码比较容易猜到，建议再添加一个备用解锁方式，忘记时还能进入。", color = WarnAmber, fontSize = 11.sp)
+                        } else {
+                            Text("可以再添加一个备用解锁方式，忘记时还能进入；不是必须现在设置。", color = TextDim, fontSize = 11.sp)
                         }
                     }
                     "pattern" -> {
@@ -503,9 +505,27 @@ fun CredentialCreatorDialog(
 }
 
 private fun looksWeak(p: String): Boolean {
-    if (p.length < 6) return true
-    val common = setOf("1234", "12345", "123456", "0000", "1111", "8888", "6666", "12345678", "abc123")
-    return p.lowercase() in common || p.toSet().size <= 2
+    if (p.isBlank()) return false
+    if (p.length < 4) return true
+    val common = setOf(
+        "1234", "12345", "123456", "1234567", "12345678", "123456789",
+        "0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
+        "1212", "1313", "1122", "2580", "147258", "abc123"
+    )
+    val low = p.lowercase()
+    if (low in common) return true
+    if (p.toSet().size <= 2) return true
+    if (p.all { it == p[0] }) return true
+    val up = p.zipWithNext().all { (a, b) -> b - a == 1 }
+    val down = p.zipWithNext().all { (a, b) -> a - b == 1 }
+    if (up || down) return true
+    // 121212、123123、12341234 这类循环重复
+    if (p.length >= 4) {
+        for (n in 1..p.length / 2) {
+            if (p.length % n == 0 && p == p.substring(0, n).repeat(p.length / n)) return true
+        }
+    }
+    return false
 }
 
 // ---------------------------------------------------------------- 保险箱内容

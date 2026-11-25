@@ -52,6 +52,27 @@ fun FtpScreen(ctx: Context, nav: NavStack) {
     val address = FtpManager.address
     val clients = FtpManager.clients
 
+    // 共享范围修改要立即生效：运行中直接用新配置重启监听端口，旧连接会断开
+    fun applyRoot(whole: Boolean) {
+        if (whole == rootWhole) return
+        rootWhole = whole
+        val root = if (whole) Environment.getExternalStorageDirectory().absolutePath
+        else Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+        val s = cfg.copy(root = root)
+        cfg = s
+        if (FtpManager.running) {
+            busy = true
+            val err = FtpManager.applySettings(ctx, s)
+            busy = false
+            toast = err ?: if (whole) "已切换为整个内部存储。电脑端请断开后重新连接，即可看到全部内容。"
+            else "已切换为仅 Download 文件夹。电脑端请断开后重新连接，只能看到下载内容。"
+        } else {
+            Prefs.setFtpSettings(ctx, s)
+            toast = if (whole) "共享范围已设为整个内部存储，开启 FTP 后生效"
+            else "共享范围已设为仅 Download 文件夹，开启 FTP 后生效"
+        }
+    }
+
     Scaffold(
         containerColor = BgDeep,
         topBar = {
@@ -156,13 +177,25 @@ fun FtpScreen(ctx: Context, nav: NavStack) {
                 SwitchRow("允许匿名访问（anonymous，不输密码）", anon, enabled = !running) { anon = it }
                 SwitchRow("只读模式（电脑只能下载，不能改手机文件）", readOnly, enabled = !running) { readOnly = it }
                 Spacer(Modifier.height(6.dp))
-                Text("共享范围", fontSize = 12.sp, color = TextDim)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = rootWhole, onClick = { if (!running) rootWhole = true }, enabled = !running)
-                    Text("整个内部存储", fontSize = 13.sp)
-                    Spacer(Modifier.width(8.dp))
-                    RadioButton(selected = !rootWhole, onClick = { if (!running) rootWhole = false }, enabled = !running)
-                    Text("仅 Download 文件夹", fontSize = 13.sp)
+                Text("共享范围（运行中也能切换，切换后电脑需重新连接）", fontSize = 12.sp, color = TextDim)
+                Column(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier.fillMaxWidth().clickable { applyRoot(true) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = rootWhole, onClick = { applyRoot(true) })
+                        Text("整个内部存储", fontSize = 13.sp, color = TextMain, modifier = Modifier.weight(1f))
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().clickable { applyRoot(false) }.padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = !rootWhole, onClick = { applyRoot(false) })
+                        Text("仅 Download 文件夹", fontSize = 13.sp, color = TextMain, modifier = Modifier.weight(1f))
+                    }
+                    if (running) {
+                        Text("当前共享根目录：${cfg.root}", fontSize = 10.sp, color = TextDim)
+                    }
                 }
                 Text("提示：手机和电脑要连同一个 WiFi；电脑防火墙如拦截，允许“专用网络”即可。", fontSize = 10.sp, color = TextDim)
             }
