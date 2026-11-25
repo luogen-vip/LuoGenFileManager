@@ -209,11 +209,18 @@ object AudioHub {
         val idx = i.coerceIn(0, list.size - 1)
         val sameList = playlist == list
         if (sameList && p.mediaItemCount == list.size) {
-            if (p.currentMediaItemIndex == idx && p.isPlaying) return
             if (p.currentMediaItemIndex == idx) {
+                if (p.isPlaying) return
                 p.play()
+                saveState(); pushState(); refreshNotification()
                 return
             }
+            // 同一个队列里切歌：直接 seek，不再清空重建，点列表立刻响应
+            index = idx
+            p.seekTo(idx, 0)
+            p.play()
+            saveState(); pushState(); startForegroundService(); refreshNotification()
+            return
         }
         playlist = list
         index = idx

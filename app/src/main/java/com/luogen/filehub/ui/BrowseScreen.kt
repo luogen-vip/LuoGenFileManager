@@ -257,6 +257,7 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
                         Icon(Icons.Filled.Close, null, tint = TextDim, modifier = Modifier.size(17.dp).clickable { query = "" })
                     }
                 }
+                if (query.isNotBlank()) PathJumpBar(nav, query, Cat.FILE)
                 Spacer(Modifier.height(6.dp))
             }
         },

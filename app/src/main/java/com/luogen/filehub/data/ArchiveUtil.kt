@@ -37,11 +37,12 @@ object ArchiveUtil {
 
     private val ZIPLIKE = setOf(
         "zip", "jar", "war", "ear", "aar", "apk", "apks", "aab", "apkm", "xapk", "ipa", "apkg",
-        "whl", "crx", "epub", "cbz", "cb7", "docx", "xlsx", "pptx", "odt", "ods", "odp"
+        "whl", "crx", "vsix", "nupkg", "xpi", "oxt", "sb3", "love", "rpa", "hap", "hsp",
+        "epub", "cbz", "cba", "docx", "xlsx", "pptx", "odt", "ods", "odp"
     )
-    private val RARLIKE = setOf("rar")
-    private val SEVENZ = setOf("7z")
-    private val TARLIKE = setOf("tar")
+    private val RARLIKE = setOf("rar", "cbr")
+    private val SEVENZ = setOf("7z", "cb7")
+    private val TARLIKE = setOf("tar", "cbt")
     private val GZLIKE = setOf("gz", "tgz")
     private val BZ2LIKE = setOf("bz2", "tbz", "tbz2")
     private val XZLIKE = setOf("xz", "txz")

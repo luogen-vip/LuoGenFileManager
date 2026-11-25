@@ -143,6 +143,8 @@ object FileOps {
         if (clean == src.name) return null
         val target = File(src.parentFile, clean)
         if (target.exists()) return "同目录下已存在同名文件"
+        // 第一次改名时把真实原名记下来，后面“恢复默认名”才有依据
+        Prefs.rememberOriginal(src.absolutePath, src.name)
         if (!src.renameTo(target)) return "重命名失败（可能被占用或没有权限）"
         Prefs.moveOriginal(item.path, target.absolutePath)
         if (Prefs.isFav(item.path)) {
@@ -158,10 +160,10 @@ object FileOps {
         if (!f.exists()) return "文件不存在"
         val orig = Prefs.originalOf(item.path) ?: item.name
         val realExt = TypeDetect.detectByMagic(f)
-        var baseName = orig.substringBeforeLast('.', orig)
-        if (baseName.isBlank()) baseName = f.name.substringBeforeLast('.', f.name)
-        var targetName = if (realExt != null) "$baseName.$realExt" else orig
-        if (targetName == f.name && realExt == null) return "已经是默认名称"
+        val origExt = orig.substringAfterLast('.', "")
+        // 有记录就严格恢复记录的原名（含原后缀）；只有原名没后缀时才用文件头补后缀
+        val targetName = if (origExt.isEmpty() && realExt != null) "$orig.$realExt" else orig
+        if (targetName == f.name) return "已经是默认名称"
         val target = File(f.parentFile, targetName)
         if (target.exists() && target.absolutePath != f.absolutePath) {
             val n = uniqueTarget(f.parentFile, targetName)

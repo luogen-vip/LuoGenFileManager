@@ -390,10 +390,11 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         Spacer(Modifier.height(10.dp))
         // 五格等宽：循环、上一曲、播放、下一曲、列表，全部严格居中，左右对称
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(52.dp), contentAlignment = Alignment.Center) {
                 IconButton(onClick = { hub.cycleRepeat() }) {
                     Icon(
                         when (hub.repeatMode) {
@@ -406,27 +407,28 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                     )
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(52.dp), contentAlignment = Alignment.Center) {
                 IconButton(onClick = { hub.prev() }) {
                     Icon(Icons.Filled.SkipPrevious, "上一曲", tint = TextDim, modifier = Modifier.size(30.dp))
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                FloatingActionButton(
-                    onClick = { hub.toggle() },
-                    containerColor = BrandBlue,
-                    modifier = Modifier.size(62.dp)
-                ) {
+            Surface(
+                onClick = { hub.toggle() },
+                shape = RoundedCornerShape(18.dp),
+                color = BrandBlue,
+                modifier = Modifier.size(62.dp)
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null,
                         tint = Color.White, modifier = Modifier.size(30.dp))
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(52.dp), contentAlignment = Alignment.Center) {
                 IconButton(onClick = { hub.next() }) {
                     Icon(Icons.Filled.SkipNext, "下一曲", tint = TextDim, modifier = Modifier.size(30.dp))
                 }
             }
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(52.dp), contentAlignment = Alignment.Center) {
                 IconButton(onClick = { queueOpen = true }) {
                     Icon(Icons.Filled.PlaylistPlay, "播放列表", tint = BrandBlue, modifier = Modifier.size(26.dp))
                 }
@@ -452,7 +454,10 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             queue = queuePaths,
             current = hub.index,
             playing = hub.playing,
-            onPlay = { i -> hub.playQueueAt(i, ctx); queueOpen = false },
+            onPlay = { i ->
+                queueOpen = false
+                hub.playQueueAt(i, ctx)
+            },
             onRemove = { i ->
                 hub.removeAt(i)
                 if (hub.playlist.isEmpty()) {
@@ -483,6 +488,14 @@ private fun PlayQueueDialog(
     onRemove: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var picked by remember { mutableStateOf(-1) }
+    LaunchedEffect(picked) {
+        if (picked >= 0) {
+            delay(140)
+            onPlay(picked)
+            picked = -1
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("播放列表 · ${queue.size} 首", fontSize = 16.sp) },
@@ -496,20 +509,22 @@ private fun PlayQueueDialog(
                     items(count = queue.size, key = { i -> "$i|${queue[i]}" }) { i ->
                         val name = File(queue[i]).name
                         Row(
-                            Modifier.fillMaxWidth().clickable { onPlay(i) }.padding(vertical = 7.dp),
+                            Modifier.fillMaxWidth().clickable { if (picked < 0) picked = i }.padding(vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                if (i == current) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
+                                if (i == current || i == picked) Icons.Filled.VolumeUp else Icons.Filled.MusicNote,
                                 null,
-                                tint = if (i == current) BrandBlue else TextDim,
+                                tint = if (i == current || i == picked) BrandBlue else TextDim,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                    color = if (i == current) BrandBlue else Color.Unspecified)
-                                Text(if (i == current) (if (playing) "正在播放" else "已暂停") else "第 ${i + 1} 首",
+                                    color = if (i == current || i == picked) BrandBlue else Color.Unspecified)
+                                Text(if (i == picked) "正在切换…"
+                                    else if (i == current) (if (playing) "正在播放" else "已暂停")
+                                    else "第 ${i + 1} 首",
                                     fontSize = 10.sp, color = TextDim)
                             }
                             IconButton(onClick = { onRemove(i) }, modifier = Modifier.size(32.dp)) {

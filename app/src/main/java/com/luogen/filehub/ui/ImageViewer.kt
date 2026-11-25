@@ -438,6 +438,7 @@ fun GlobalSearchScreen(ctx: Context, nav: NavStack, repo: com.luogen.filehub.dat
                         }
                     }
                 }
+                if (query.isNotBlank()) PathJumpBar(nav, query, Cat.FILE)
                 Text(
                     when {
                         loading -> "正在搜索…"

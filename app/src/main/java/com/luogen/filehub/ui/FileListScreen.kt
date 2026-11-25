@@ -364,6 +364,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                         )
                     }
                 }
+                if (query.isNotBlank()) PathJumpBar(nav, query, cat)
                 Spacer(Modifier.height(4.dp))
 
                 if (cat == Cat.APP) {
@@ -459,6 +460,10 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                     )
                 }
                 ActionPanel(actions)
+            } else if (cat == Cat.AUDIO && AudioHub.playlist.isNotEmpty()) {
+                Box(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    MiniPlayerBar(nav)
+                }
             }
         }
     ) { padding ->

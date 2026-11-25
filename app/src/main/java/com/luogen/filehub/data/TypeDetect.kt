@@ -624,6 +624,110 @@ object TypeDetect {
 
     private fun more3Label(e: String): String? = EXT_LABEL_MORE3[e]
 
+
+    /** 第五批：剪辑/音频工程、地图、取证、系统日志、代码产物等 */
+    private val EXT_LABEL_MORE4 = mapOf(
+        "aep" to "After Effects 工程",
+        "aepx" to "After Effects XML 工程",
+        "prproj" to "Premiere 工程",
+        "mogrt" to "Premiere 动态图形模板",
+        "veg" to "Vegas 工程",
+        "vf" to "Vegas 工程",
+        "drp" to "DaVinci Resolve 工程",
+        "fcpxml" to "Final Cut Pro XML 工程",
+        "fcpxmld" to "Final Cut Pro 资源包",
+        "imovieproj" to "iMovie 工程",
+        "wlmp" to "Windows Live 影音项目",
+        "camproj" to "Camtasia 工程",
+        "camrec" to "Camtasia 录制",
+        "vpj" to "VideoPad 工程",
+        "tvpp" to "TVPaint 工程",
+        "mlt" to "MLT 视频工程",
+        "kdenlive" to "Kdenlive 工程",
+        "osp" to "OpenShot 工程",
+        "sfk" to "Sound Forge 峰值",
+        "aup" to "Audacity 工程",
+        "sesx" to "Audition 会话",
+        "sf2" to "SoundFont 音色库",
+        "sfz" to "SFZ 音色",
+        "dls" to "DLS 音色库",
+        "gig" to "GigaStudio 音色",
+        "rx2" to "Reason 音色",
+        "rex" to "REX 循环",
+        "wproj" to "Wavosaur 工程",
+        "vrm" to "VRM 虚拟形象",
+        "vrml" to "VRML 模型",
+        "wrl" to "VRML 模型",
+        "x3d" to "X3D 模型",
+        "mbtiles" to "离线地图包",
+        "pmtiles" to "PMTiles 地图包",
+        "osm" to "OpenStreetMap 数据",
+        "pbf" to "地图 PBF 数据",
+        "shp" to "Shapefile 地图",
+        "shx" to "Shapefile 索引",
+        "sbn" to "Shapefile 空间索引",
+        "sbx" to "Shapefile 索引",
+        "prj" to "坐标投影文件",
+        "cpg" to "Shapefile 编码",
+        "qgs" to "QGIS 工程",
+        "qgz" to "QGIS 压缩工程",
+        "mxd" to "ArcMap 文档",
+        "aprx" to "ArcGIS Pro 工程",
+        "lyr" to "ArcGIS 图层",
+        "lyrx" to "ArcGIS Pro 图层",
+        "style" to "地图样式",
+        "hap" to "HarmonyOS 应用包",
+        "hsp" to "HarmonyOS 共享包",
+        "vsix" to "VS Code 扩展包",
+        "nupkg" to "NuGet 包",
+        "xpi" to "Firefox 扩展包",
+        "oxt" to "LibreOffice 扩展",
+        "sb3" to "Scratch 3 项目",
+        "love" to "LÖVE 游戏",
+        "cba" to "漫画包 · CBA",
+        "cbt" to "漫画包 · CBT",
+        "cb7" to "漫画包 · CB7",
+        "cbr" to "漫画包 · CBR",
+        "cbz" to "漫画包 · CBZ",
+        "evtx" to "Windows 事件日志",
+        "evt" to "Windows 事件日志",
+        "etl" to "Windows 跟踪日志",
+        "bkf" to "Windows 备份",
+        "bkp" to "备份文件",
+        "backup" to "备份文件",
+        "ab" to "Android 备份",
+        "adb" to "Android 调试备份",
+        "crypt12" to "WhatsApp 加密备份",
+        "crypt14" to "WhatsApp 加密备份",
+        "crypt15" to "WhatsApp 加密备份",
+        "e01" to "EnCase 取证镜像",
+        "aff" to "AFF 取证镜像",
+        "aff4" to "AFF4 取证镜像",
+        "dd" to "DD 磁盘镜像",
+        "pkpass" to "Apple 钱包卡券",
+        "p7s" to "分离式数字签名",
+        "p7m" to "S/MIME 加密邮件",
+        "rpy" to "Ren'Py 脚本",
+        "rpyc" to "Ren'Py 编译脚本",
+        "renpy" to "Ren'Py 工程",
+        "pyc" to "Python 字节码",
+        "pyo" to "Python 优化字节码",
+        "pyd" to "Python 扩展模块",
+        "class" to "Java 字节码",
+        "dex" to "Dalvik 字节码",
+        "odex" to "优化 Dalvik 字节码",
+        "vdex" to "VDEX 字节码",
+        "art" to "ART 运行时镜像",
+        "wasm" to "WebAssembly 模块",
+        "wat" to "WebAssembly 文本",
+        "so" to "共享库",
+        "dylib" to "macOS 动态库",
+        "lib" to "静态库",
+        "a" to "静态库"
+    )
+
+    private fun more4Label(e: String): String? = EXT_LABEL_MORE4[e]
+
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
@@ -631,6 +735,7 @@ object TypeDetect {
         moreLabel(e)?.let { return it }
         more2Label(e)?.let { return it }
         more3Label(e)?.let { return it }
+        more4Label(e)?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"

@@ -121,7 +121,14 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "j64", "jag", "col", "int", "vec", "d64", "t64", "crt", "d81", "adf", "ipf", "st", "stx", "msa" -> Icons.Filled.SportsEsports
     "onnx", "pt", "pth", "ckpt", "safetensors", "tflite", "mlmodel", "gguf", "ggml", "keras",
     "joblib", "pkl", "pickle", "npy", "npz", "hprof", "dmp", "minidump", "heap" -> Icons.Filled.Memory
-    "pcap", "pcapng", "cap", "saz", "kdb", "opvault", "keychain", "psafe3", "sxf" -> Icons.Filled.Security
+    "aep", "aepx", "prproj", "mogrt", "veg", "vf", "drp", "fcpxml", "fcpxmld", "imovieproj",
+    "wlmp", "camproj", "vpj", "tvpp", "mlt", "kdenlive", "osp" -> Icons.Filled.Movie
+    "aup", "sesx", "sf2", "sfz", "dls", "gig", "rx2", "rex", "wproj", "sfk" -> Icons.Filled.Audiotrack
+    "shp", "shx", "sbn", "sbx", "prj", "cpg", "qgs", "qgz", "mxd", "aprx", "lyr", "lyrx",
+    "mbtiles", "pmtiles", "osm", "pbf" -> Icons.Filled.Place
+    "pyc", "pyo", "pyd", "class", "dex", "odex", "vdex", "art", "wasm", "wat", "so", "dylib", "lib", "a" -> Icons.Filled.Terminal
+    "pcap", "pcapng", "cap", "saz", "kdb", "opvault", "keychain", "psafe3", "sxf",
+    "e01", "aff", "aff4", "dd", "p7s", "p7m" -> Icons.Filled.Security
     "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
     "feather", "arrow", "hdf5", "h5", "nc", "mat", "sav", "dta", "sas7bdat", "xpt", "rdata", "rds" -> Icons.Filled.Storage
     "apk", "xapk", "apks", "aab", "ap", "ipa", "pkg", "mpkg", "flatpakref", "flatpakrepo", "run", "appimage" -> Icons.Filled.Apps
@@ -144,7 +151,14 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "j64", "jag", "col", "int", "vec", "d64", "t64", "crt", "d81", "adf", "ipf", "st", "stx", "msa" -> Icons.Filled.SportsEsports
     "onnx", "pt", "pth", "ckpt", "safetensors", "tflite", "mlmodel", "gguf", "ggml", "keras",
     "joblib", "pkl", "pickle", "npy", "npz", "hprof", "dmp", "minidump", "heap" -> Icons.Filled.Memory
-    "pcap", "pcapng", "cap", "saz", "kdb", "opvault", "keychain", "psafe3", "sxf" -> Icons.Filled.Security
+    "aep", "aepx", "prproj", "mogrt", "veg", "vf", "drp", "fcpxml", "fcpxmld", "imovieproj",
+    "wlmp", "camproj", "vpj", "tvpp", "mlt", "kdenlive", "osp" -> Icons.Filled.Movie
+    "aup", "sesx", "sf2", "sfz", "dls", "gig", "rx2", "rex", "wproj", "sfk" -> Icons.Filled.Audiotrack
+    "shp", "shx", "sbn", "sbx", "prj", "cpg", "qgs", "qgz", "mxd", "aprx", "lyr", "lyrx",
+    "mbtiles", "pmtiles", "osm", "pbf" -> Icons.Filled.Place
+    "pyc", "pyo", "pyd", "class", "dex", "odex", "vdex", "art", "wasm", "wat", "so", "dylib", "lib", "a" -> Icons.Filled.Terminal
+    "pcap", "pcapng", "cap", "saz", "kdb", "opvault", "keychain", "psafe3", "sxf",
+    "e01", "aff", "aff4", "dd", "p7s", "p7m" -> Icons.Filled.Security
     "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
     "feather", "arrow", "hdf5", "h5", "nc", "mat", "sav", "dta", "sas7bdat", "xpt", "rdata", "rds" -> Icons.Filled.Storage
     "kml", "kmz", "gpx", "fit", "tcx" -> Icons.Filled.Place
