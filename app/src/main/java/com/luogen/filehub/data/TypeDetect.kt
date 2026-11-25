@@ -98,11 +98,12 @@ object TypeDetect {
             // apk / xapk 本质是 zip，但类型必须显示成应用，不能被当成压缩包
             e == "apk" || e == "xapk" || e == "apks" || mime == "application/vnd.android.package-archive" -> Cat.APP
             e in IMAGE_EXT || mime.startsWith("image/") -> Cat.IMAGE
-            // .ts 既是 MPEG-TS 视频也是 TypeScript；有文本 MIME 时按代码处理
-            e == "ts" && (mime.startsWith("text/") || mime.contains("typescript")) -> Cat.DOC
+            // .ts 既是 MPEG-TS 视频也是 TypeScript；只有明确视频 MIME 才当视频
+            e == "ts" && isTsCode(mime) -> Cat.DOC
             e in VIDEO_EXT || mime.startsWith("video/") -> Cat.VIDEO
             e in AUDIO_EXT || mime.startsWith("audio/") -> Cat.AUDIO
-            e in ARCHIVE_EXT || mime.contains("zip") || mime.contains("compressed") || mime.contains("x-7z") -> Cat.ARCHIVE
+            e in ARCHIVE_EXT || e.matches(Regex("(\\d{3}|r\\d{2}|z\\d{2})")) ||
+                mime.contains("zip") || mime.contains("compressed") || mime.contains("x-7z") -> Cat.ARCHIVE
             e in DOC_EXT || mime.startsWith("text/") || mime.contains("pdf") ||
                 mime.contains("word") || mime.contains("sheet") || mime.contains("presentation") ||
                 mime.contains("officedocument") -> Cat.DOC
@@ -244,7 +245,7 @@ object TypeDetect {
         "dll" to "动态链接库", "sys" to "系统驱动文件", "drv" to "设备驱动", "ocx" to "ActiveX 控件",
         "cpl" to "控制面板项", "inf" to "驱动安装信息", "reg" to "注册表文件", "cab" to "Windows 压缩包",
         "iso" to "光盘镜像 · ISO", "esd" to "Windows 系统镜像 · ESD", "wim" to "Windows 系统镜像 · WIM",
-        "img" to "磁盘/系统镜像 · IMG", "dmg" to "macOS 磁盘映像", "toast" to "macOS 光盘映像",
+        "img" to "磁盘镜像 / 图片", "dmg" to "macOS 磁盘映像", "toast" to "macOS 光盘映像",
         "deb" to "Debian/Ubuntu 安装包", "rpm" to "Linux RPM 安装包", "appimage" to "Linux AppImage 程序",
         "flatpak" to "Linux Flatpak 包", "snap" to "Linux Snap 包", "ipa" to "iOS 应用包",
         "apkg" to "Anki 卡包", "xapk" to "安卓 XAPK 安装包", "apks" to "安卓 APKS 安装包", "obb" to "安卓 OBB 数据包",
@@ -743,13 +744,21 @@ object TypeDetect {
         "tar.gz.001" to "TAR.GZ 分卷压缩包（第 1 卷）",
         "d.ts" to "TypeScript 声明文件", "min.js" to "压缩版 JavaScript", "min.css" to "压缩版 CSS",
         "user.js" to "浏览器用户脚本", "user.css" to "浏览器用户样式", "schema.json" to "JSON Schema 描述文件"
-    )
+    ) + (1..99).associate { "%03d".format(it) to "分卷 / 拆分文件（第 $it 卷）" } +
+        (0..99).associate { "r%02d".format(it) to "RAR 分卷（第 $it 卷）" } +
+        (1..99).associate { "z%02d".format(it) to "ZIP 分卷（第 $it 卷）" }
+
+    /** .ts 双含义：只有明确的 MPEG-TS 视频 MIME 才当视频，其余按 TypeScript 源码处理 */
+    private fun isTsCode(mime: String): Boolean {
+        val m = mime.lowercase()
+        return !(m.contains("mp2t") || m.contains("mpegts") || m.contains("m2ts"))
+    }
 
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
         COMPOUND_LABEL[e]?.let { return it }
-        if (e == "ts" && (mime.startsWith("text/") || mime.contains("typescript"))) return "TypeScript 源码"
+        if (e == "ts" && isTsCode(mime)) return "TypeScript 源码"
         EXT_LABEL[e]?.let { return it }
         moreLabel(e)?.let { return it }
         more2Label(e)?.let { return it }
@@ -761,7 +770,7 @@ object TypeDetect {
             e in IMAGE_EXT -> "图片 · ${e.uppercase()}"
             e in VIDEO_EXT -> "视频 · ${e.uppercase()}"
             e in AUDIO_EXT -> "音频 · ${e.uppercase()}"
-            e in ARCHIVE_EXT || e.contains("tar.") -> "压缩包 · ${e.uppercase()}"
+            e in ARCHIVE_EXT || e.contains("tar.") || e.matches(Regex("(\\d{3}|r\\d{2}|z\\d{2})")) -> "压缩包 · ${e.uppercase()}"
             e == "pdf" -> "PDF 文档"
             e == "doc" || e == "docx" -> "Word 文档"
             e == "xls" || e == "xlsx" || e == "csv" -> "表格 · ${e.uppercase()}"
