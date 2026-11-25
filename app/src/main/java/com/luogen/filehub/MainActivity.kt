@@ -35,11 +35,11 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("open_ftp", false) == true) AppState.ftpOpenRequested = true
         super.onCreate(savedInstanceState)
         Prefs.init(this)
+        // 先把上次的播放队列接回来，再恢复导航，播放页才知道该回到哪首歌
+        try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         // 进程被清理后重新打开：导航栈回到上次的位置，而不是永远回首页
         try { AppState.restoreSearchFilters() } catch (_: Throwable) {}
         try { AppState.nav.restore(Prefs.navRoutes()) } catch (_: Throwable) {}
-        // 进程被系统回收后再打开：把上次队列接回来；上次正在播就继续播
-        try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         try {
             androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                 .isAppearanceLightStatusBars = true
