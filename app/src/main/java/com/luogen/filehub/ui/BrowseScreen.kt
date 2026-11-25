@@ -40,6 +40,7 @@ import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.SortMode
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -69,6 +70,8 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     var prog by remember { mutableStateOf<Prog?>(null) }
     var loading by remember { mutableStateOf(false) }
     var loadedPath by remember { mutableStateOf("") }
+    var showSpinner by remember { mutableStateOf(false) }
+    val browseCache = remember { HashMap<String, List<FileItem>>() }
     var sortExpanded by remember { mutableStateOf(false) }
     val startPath = dirPath
     val rootPath = android.os.Environment.getExternalStorageDirectory().absolutePath
@@ -76,10 +79,13 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
     LaunchedEffect(current.absolutePath) {
         volumes = withContext(Dispatchers.IO) { try { repo.volumes() } catch (_: Throwable) { emptyList() } }
     }
-    val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = AppState.scrollOf("browse:" + dirPath),
-        initialFirstVisibleItemScrollOffset = AppState.scrollOffsetOf("browse:" + dirPath)
-    )
+    // 每个文件夹一个独立滚动状态，进入新目录不会带着上个目录的位置跳一下
+    val listState = remember(current.absolutePath) {
+        androidx.compose.foundation.lazy.LazyListState(
+            AppState.scrollOf("browse:" + current.absolutePath),
+            AppState.scrollOffsetOf("browse:" + current.absolutePath)
+        )
+    }
     var firstSortEffect by remember { mutableStateOf(true) }
     LaunchedEffect(sortMode, asc, query) {
         if (firstSortEffect) {
@@ -99,14 +105,31 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         }
     }
 
+    // 先秒出上次看过的同一文件夹缓存，再后台刷新；绝不先清空 -> 不再闪白/闪空
+    LaunchedEffect(current.absolutePath) {
+        showSpinner = false
+        delay(220)
+        if (loadedPath != current.absolutePath) showSpinner = true
+    }
     LaunchedEffect(current.absolutePath, refresh) {
-        val changedDir = loadedPath != current.absolutePath
-        if (changedDir) items = emptyList()
-        loading = items.isEmpty()
+        val path = current.absolutePath
+        val changedDir = loadedPath != path
+        if (changedDir) {
+            val hit = browseCache[path]
+            if (hit != null) {
+                items = hit
+                loadedPath = path
+                loading = false
+            } else {
+                loading = true
+            }
+        }
         val loaded = withContext(Dispatchers.IO) { try { repo.listDir(current) } catch (_: Throwable) { emptyList() } }
+        if (loaded.isNotEmpty() || changedDir) browseCache[path] = loaded
         items = loaded
-        loadedPath = current.absolutePath
+        loadedPath = path
         loading = false
+        showSpinner = false
         // 恢复这个文件夹上次的滚动位置
         try {
             val saved = AppState.scrollOf("browse:" + current.absolutePath)
@@ -280,9 +303,10 @@ fun BrowseScreen(ctx: Context, nav: NavStack, repo: FileRepo, dirPath: String) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            if (loading && items.isEmpty()) {
+            val ready = loadedPath == current.absolutePath
+            if (!ready) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BrandBlue)
+                    if (showSpinner) CircularProgressIndicator(color = BrandBlue)
                 }
             } else if (display.isEmpty()) {
                 EmptyView(if (query.isNotEmpty()) "没有匹配项" else "这个文件夹是空的")

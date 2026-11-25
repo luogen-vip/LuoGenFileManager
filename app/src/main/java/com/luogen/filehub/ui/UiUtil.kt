@@ -131,6 +131,15 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf", "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb", "blend" -> Icons.Filled.Brush
     "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
     "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc" -> Icons.Filled.Storage
+    "kml", "kmz", "gpx", "fit", "tcx" -> Icons.Filled.Place
+    "3mf", "amf", "ply", "gcode", "nc", "stl" -> Icons.Filled.Print
+    "ktx", "ktx2", "basis", "dds", "thm", "exr", "hdr" -> Icons.Filled.Photo
+    "mht", "mhtml", "webarchive" -> Icons.Filled.Language
+    "rss", "atom", "opml", "xbel" -> Icons.Filled.RssFeed
+    "kdbx", "wallet", "1pif" -> Icons.Filled.Security
+    "pst", "ost", "olm", "eml", "msg", "mbox" -> Icons.Filled.Email
+    "lz4", "zst", "br", "zstd" -> Icons.Filled.FolderZip
+    "rt", "sbv", "vtt", "ass", "ssa", "srt" -> Icons.Filled.TextSnippet
     else -> Icons.Filled.InsertDriveFile
 }
 
