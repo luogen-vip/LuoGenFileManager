@@ -958,9 +958,7 @@ private fun ListCell(
                         DropdownMenuItem(text = { Text(if (Prefs.isFav(item.path)) "取消收藏" else "收藏") }, onClick = {
                             menu = false
                             onMsg(if (Prefs.toggleFav(item.path)) "已收藏" else "已取消收藏")
-                            AppState.markDataChanged()
-                            AppState.countsDirty = true
-                            force++
+                            onRefresh()
                         })
                         DropdownMenuItem(text = { Text("分享") }, onClick = { menu = false; FileOps.share(ctx, listOf(item)) })
                         DropdownMenuItem(text = { Text("复制路径") }, onClick = {
