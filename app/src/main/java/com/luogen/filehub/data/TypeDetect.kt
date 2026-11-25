@@ -825,7 +825,7 @@ object TypeDetect {
         "cc" to "C/C++ 源文件", "c++" to "C++ 源文件", "ipp" to "C++ 内联实现", "inl" to "C++ 内联文件",
         "tpp" to "C++ 模板实现", "txx" to "C++ 模板源文件", "nasm" to "NASM 汇编源码",
         "wat" to "WebAssembly 文本格式", "ll" to "LLVM IR 中间代码",
-        "cu" to "CUDA 源码", "cuh" to "CUDA 头文件", "hip" to "HIP 异构计算源码",
+        "cu" to "CUDA 源码", "cuh" to "CUDA 头文件", "hip" to "HIP 源码 / Houdini 工程",
         "sol" to "Solidity 智能合约", "move" to "Move 智能合约", "cairo" to "Cairo 智能合约",
         "vy" to "Vyper 智能合约", "rego" to "OPA Rego 策略", "tf" to "Terraform 配置",
         "tfvars" to "Terraform 变量", "tfstate" to "Terraform 状态", "tfplan" to "Terraform 计划",
@@ -900,7 +900,7 @@ object TypeDetect {
         "fcpxml" to "Final Cut Pro XML 工程", "kdenlive" to "Kdenlive 视频工程",
         "mlt" to "MLT 视频工程", "wlmp" to "Windows Live 影音工程", "dvp" to "DV 视频工程",
         "drp" to "DaVinci Resolve 工程", "aep" to "After Effects 工程", "aepx" to "After Effects XML 工程",
-        "hip" to "Houdini 工程", "hiplc" to "Houdini 非商业工程", "nk" to "Nuke 工程",
+        "hiplc" to "Houdini 非商业工程", "nk" to "Nuke 工程",
         "nukescript" to "Nuke 脚本", "camproj" to "Camtasia 工程", "camrec" to "Camtasia 录制",
         "screenflow" to "ScreenFlow 工程", "fla" to "Flash 工程", "xfl" to "Flash 工程目录",
 
