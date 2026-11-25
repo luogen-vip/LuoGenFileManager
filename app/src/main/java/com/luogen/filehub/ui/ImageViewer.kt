@@ -170,6 +170,7 @@ fun ImageViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                 "大小" to f.length().toSizeText(),
                 "修改时间" to f.lastModified().toFullTime(),
                 "格式" to f.name.substringAfterLast('.', "").uppercase(),
+                "文件类型" to TypeDetect.labelOf(f.name),
                 "完整路径" to path
             ),
             onCopy = { clipboard.setText(AnnotatedString(it)); toast = "路径已复制" },

@@ -203,6 +203,7 @@ fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             rows = listOf(
                 "大小" to f.length().toSizeText(),
                 "时长" to fmtTime(player.duration.coerceAtLeast(0)),
+                "文件类型" to TypeDetect.labelOf(f.name),
                 "修改时间" to f.lastModified().toFullTime(),
                 "完整路径" to p
             ),

@@ -48,7 +48,12 @@ object TypeDetect {
         "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
         "npmrc", "yarnrc", "gemfile", "podfile", "vagrantfile", "jenkinsfile", "htaccess", "htpasswd",
         "repo", "service", "timer", "socket", "desktop", "plist", "strings", "storyboard", "xib", "resx", "rc",
-        "diff", "patch", "rej", "orig", "bak", "tmp", "part", "crdownload", "download"
+        "diff", "patch", "rej", "orig", "bak", "tmp", "part", "crdownload", "download",
+        "docm", "dotm", "docxf", "xlsm", "xltm", "xlam", "pptm", "potm", "ppam", "ppsx", "ppsm",
+        "sldx", "sldm", "pages", "numbers", "key", "hwp", "hwpx", "wps", "et", "dps", "ofd",
+        "xps", "oxps", "one", "onetoc2", "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr",
+        "cb7", "djvu", "lit", "tex", "ltx", "bib", "typ", "cls", "sty", "ris", "enw", "nbib"
+
     )
 
     val ARCHIVE_EXT = setOf(
@@ -57,7 +62,11 @@ object TypeDetect {
         "xz", "txz", "z", "lzh", "lha", "xar", "pkg", "deb", "rpm", "apkg", "xapk", "obb",
         "tar.gz", "tar.bz2", "tar.xz", "tgz", "tbz2", "zipx", "alz", "egg",
         "tar.zst", "tzst", "tar.lz", "tar.lzma", "zstd", "lz4", "br", "rar5", "part1", "r00", "r01",
-        "001", "7z.001", "zip.001", "bzip2", "gzip", "compress", "zoo", "ace", "pea", "sit", "sitx", "hqx"
+        "001", "7z.001", "zip.001", "bzip2", "gzip", "compress", "zoo", "ace", "pea", "sit", "sitx", "hqx",
+        "aab", "apkm", "jar", "war", "ear", "aar", "bundle", "framework", "toast", "b5t", "b6t",
+        "ccd", "mds", "mdf", "nrg", "cdi", "daa", "uif", "isz", "vhd", "vhdx", "vmdk", "qcow",
+        "qcow2", "ova", "ovf", "hdd", "vbox", "pvm"
+
     )
 
     val TEXT_EXT = setOf(
@@ -290,10 +299,72 @@ object TypeDetect {
         "pro" to "Pro 工程/脚本", "tcl" to "Tcl 脚本", "awk" to "AWK 脚本", "sed" to "sed 脚本"
     )
 
+    /** 第二批扩展名标签，覆盖办公、电子书、设计、三维、镜像、数据等更细的类型 */
+    private val EXT_LABEL_MORE = mapOf(
+        "docm" to "Word 启用宏文档", "dotm" to "Word 启用宏模板", "docxf" to "ONLYOFFICE 表单",
+        "xlsm" to "Excel 启用宏工作簿", "xltm" to "Excel 启用宏模板", "xlam" to "Excel 加载项",
+        "pptm" to "PowerPoint 启用宏演示", "potm" to "PowerPoint 启用宏模板", "ppam" to "PowerPoint 加载项",
+        "ppsx" to "PowerPoint 放映文件", "ppsm" to "PowerPoint 启用宏放映", "sldx" to "PowerPoint 幻灯片",
+        "sldm" to "PowerPoint 启用宏幻灯片", "pages" to "Apple Pages 文档", "numbers" to "Apple Numbers 表格",
+        "key" to "Apple Keynote 演示", "hwp" to "韩文 HWP 文档", "hwpx" to "韩文 HWPX 文档",
+        "wps" to "WPS 文字文档", "et" to "WPS 表格", "dps" to "WPS 演示", "ofd" to "OFD 版式文档",
+        "xps" to "XPS 版式文档", "oxps" to "OpenXPS 版式文档", "one" to "OneNote 笔记",
+        "onetoc2" to "OneNote 目录", "epub" to "EPUB 电子书", "mobi" to "Kindle MOBI 电子书",
+        "azw" to "Kindle 电子书", "azw3" to "Kindle KF8 电子书", "fb2" to "FictionBook 电子书",
+        "cbz" to "漫画包 · CBZ", "cbr" to "漫画包 · CBR", "cb7" to "漫画包 · CB7",
+        "djvu" to "DjVu 扫描文档", "lit" to "Microsoft Reader 电子书", "tex" to "LaTeX 源文件",
+        "ltx" to "LaTeX 文档", "bib" to "BibTeX 参考文献", "typ" to "Typst 文档", "cls" to "LaTeX 类文件",
+        "sty" to "LaTeX 样式", "ris" to "RIS 文献数据", "enw" to "EndNote 文献", "nbib" to "PubMed 文献",
+        "vhd" to "虚拟硬盘 · VHD", "vhdx" to "虚拟硬盘 · VHDX", "vmdk" to "VMware 虚拟磁盘",
+        "qcow" to "QEMU 虚拟磁盘", "qcow2" to "QEMU 虚拟磁盘 · QCOW2", "ova" to "虚拟机导出包 · OVA",
+        "ovf" to "虚拟机描述 · OVF", "hdd" to "虚拟机硬盘 · HDD", "vbox" to "VirtualBox 配置",
+        "pvm" to "Parallels 虚拟机", "sparseimage" to "macOS 稀疏磁盘映像",
+        "aab" to "Android App Bundle", "apkm" to "APKM 拆分安装包", "ipa" to "iOS 应用包",
+        "jar" to "Java 归档/JAR", "war" to "Java Web 归档", "ear" to "Java 企业归档",
+        "aar" to "Android 库归档", "bundle" to "macOS 插件包", "framework" to "macOS 框架",
+        "msu" to "Windows 更新包", "msp" to "Windows 补丁包", "mst" to "Windows 安装变换",
+        "appref-ms" to "ClickOnce 应用引用", "website" to "网站快捷方式", "url" to "网址快捷方式",
+        "webloc" to "macOS 网址快捷方式", "psb" to "Photoshop 大文档", "xcf" to "GIMP 工程",
+        "kra" to "Krita 绘画工程", "ora" to "OpenRaster 绘画工程", "clip" to "Clip Studio 工程",
+        "csp" to "Clip Studio 绘画", "sai" to "SAI 绘画工程", "sai2" to "SAI2 绘画工程",
+        "afdesign" to "Affinity Designer 工程", "afphoto" to "Affinity Photo 工程",
+        "afpub" to "Affinity Publisher 工程", "sketch" to "Sketch 设计稿", "fig" to "Figma 设计稿",
+        "xd" to "Adobe XD 设计稿", "indd" to "InDesign 排版文档", "idml" to "InDesign 交换文档",
+        "qxd" to "QuarkXPress 文档", "cdr" to "CorelDRAW 图形", "vsd" to "Visio 绘图",
+        "vsdx" to "Visio 绘图 · VSDX", "dwg" to "CAD 图纸 · DWG", "dxf" to "CAD 交换图纸",
+        "dwf" to "CAD 轻量图纸", "skp" to "SketchUp 模型", "rvt" to "Revit 建筑模型",
+        "rfa" to "Revit 族文件", "ifc" to "BIM 建筑模型 · IFC", "step" to "STEP 三维模型",
+        "stp" to "STEP 三维模型", "iges" to "IGES 三维模型", "igs" to "IGES 三维模型",
+        "3ds" to "3ds Max 场景", "max" to "3ds Max 工程", "blend" to "Blender 工程",
+        "blend1" to "Blender 备份工程", "ma" to "Maya 场景", "mb" to "Maya 二进制场景",
+        "c4d" to "Cinema 4D 工程", "lxo" to "Modo 场景", "fbx" to "FBX 三维模型",
+        "obj" to "OBJ 三维模型", "dae" to "Collada 三维模型", "gltf" to "glTF 三维模型",
+        "glb" to "GLB 三维模型", "stl" to "STL 三维模型", "parquet" to "Parquet 数据表",
+        "avro" to "Avro 数据文件", "orc" to "ORC 列式数据", "feather" to "Feather 数据表",
+        "arrow" to "Arrow 数据表", "hdf5" to "HDF5 科学数据", "h5" to "HDF5 科学数据",
+        "nc" to "NetCDF 气象数据", "mat" to "MATLAB 数据", "sav" to "SPSS 数据",
+        "dta" to "Stata 数据", "sas7bdat" to "SAS 数据", "xpt" to "SAS 传输数据",
+        "rdata" to "R 数据", "rds" to "R 数据 · RDS", "otf" to "OpenType 字体",
+        "woff" to "Web 字体 · WOFF", "woff2" to "Web 字体 · WOFF2", "eot" to "嵌入式字体 · EOT",
+        "fon" to "Windows 点阵字体", "fnt" to "点阵字体", "ttc" to "字体合集 · TTC",
+        "pfb" to "Type1 字体", "pfm" to "Type1 字体度量", "afm" to "字体度量文件",
+        "cer" to "X.509 证书", "crt" to "安全证书", "der" to "DER 编码证书", "p7b" to "PKCS#7 证书链",
+        "p7c" to "PKCS#7 证书", "p12" to "PKCS#12 证书库", "pfx" to "PFX 证书库",
+        "jks" to "Java 密钥库", "keystore" to "密钥库", "gpg" to "GnuPG 加密文件",
+        "asc" to "ASCII 签名/密钥", "sig" to "数字签名", "pem" to "PEM 证书/密钥",
+        "toast" to "Toast 光盘映像", "b5t" to "BlindWrite 光盘映像", "b6t" to "BlindWrite 光盘映像",
+        "ccd" to "CloneCD 光盘描述", "cue" to "光盘轨道表 · CUE", "mds" to "Alcohol 光盘描述",
+        "mdf" to "Alcohol 光盘镜像", "nrg" to "Nero 光盘映像", "cdi" to "DiscJuggler 光盘映像",
+        "daa" to "PowerISO 光盘映像", "uif" to "MagicISO 光盘映像", "isz" to "压缩光盘映像"
+    )
+
+    private fun moreLabel(e: String): String? = EXT_LABEL_MORE[e]
+
     /** 人类可读的文件类型标签，一眼看懂；未知扩展给出“未知类型”而不是原样吐 tx2 */
     fun labelOf(name: String, mime: String = "", file: File? = null): String {
         val e = extOf(name)
         EXT_LABEL[e]?.let { return it }
+        moreLabel(e)?.let { return it }
         val known = when {
             e == "apk" || e == "xapk" -> "APK 安装包"
             e == "apks" -> "APKS 安装包"

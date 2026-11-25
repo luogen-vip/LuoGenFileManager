@@ -115,7 +115,8 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "afdesign", "afphoto", "afpub", "blend", "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf",
     "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb" -> Icons.Filled.Brush
     "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
-    "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc" -> Icons.Filled.Storage
+    "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
+    "feather", "arrow", "hdf5", "h5", "nc", "mat", "sav", "dta", "sas7bdat", "xpt", "rdata", "rds" -> Icons.Filled.Storage
     "apk", "xapk", "apks", "aab", "ap", "ipa", "pkg", "mpkg", "flatpakref", "flatpakrepo", "run", "appimage" -> Icons.Filled.Apps
     "lnk", "url", "webloc" -> Icons.Filled.Link
     "msu", "msp", "msc", "msi", "msix", "appx", "diagcab", "job", "scf", "ps1", "psm1", "bat", "cmd", "exe", "com", "scr", "vbs", "vbe", "wsf" -> Icons.Filled.Terminal
@@ -130,7 +131,8 @@ private fun fileIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "psd", "psb", "ai", "indd", "sketch", "fig", "xd", "cdr", "eps", "kra", "clip", "sai", "afdesign", "afphoto", "afpub" -> Icons.Filled.Brush
     "stl", "obj", "fbx", "3ds", "dae", "glb", "gltf", "dwg", "dxf", "step", "stp", "iges", "igs", "skp", "max", "c4d", "ma", "mb", "blend" -> Icons.Filled.Brush
     "cer", "crt", "pem", "p12", "pfx", "der", "csr", "asc", "sig" -> Icons.Filled.Security
-    "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc" -> Icons.Filled.Storage
+    "sqlite", "sqlite3", "db", "db3", "mdb", "accdb", "dbf", "parquet", "avro", "orc",
+    "feather", "arrow", "hdf5", "h5", "nc", "mat", "sav", "dta", "sas7bdat", "xpt", "rdata", "rds" -> Icons.Filled.Storage
     "kml", "kmz", "gpx", "fit", "tcx" -> Icons.Filled.Place
     "3mf", "amf", "ply", "gcode", "nc", "stl" -> Icons.Filled.Print
     "ktx", "ktx2", "basis", "dds", "thm", "exr", "hdr" -> Icons.Filled.Photo
@@ -152,7 +154,9 @@ fun docIcon(ext: String): ImageVector = when (ext.lowercase()) {
     "jsonl", "ndjson", "qml", "ui" -> Icons.Filled.Code
     "txt", "md", "markdown", "log", "readme", "srt", "vtt", "lrc" -> Icons.Filled.TextSnippet
     "html", "htm", "xml", "json", "yaml", "yml", "toml", "ini", "conf", "cfg" -> Icons.Filled.Code
-    "epub", "mobi", "azw3", "djvu" -> Icons.Filled.MenuBook
+    "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr", "cb7", "djvu", "lit" -> Icons.Filled.MenuBook
+    "hwp", "hwpx", "wps", "ofd", "xps", "oxps", "one", "onetoc2", "docxf" -> Icons.Filled.Description
+    "tex", "ltx", "bib", "typ", "cls", "sty" -> Icons.Filled.Code
     "java", "kt", "kts", "py", "js", "ts", "css", "sh", "bat", "c", "cpp", "h", "go", "rs", "php", "sql" -> Icons.Filled.Terminal
     else -> Icons.Filled.Article
 }

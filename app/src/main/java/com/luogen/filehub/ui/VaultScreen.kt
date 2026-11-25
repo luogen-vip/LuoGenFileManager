@@ -40,6 +40,7 @@ import com.luogen.filehub.data.FileRepo
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.data.Sorter
 import com.luogen.filehub.data.VaultManager
+import com.luogen.filehub.data.TypeDetect
 import com.luogen.filehub.data.VaultStore
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
@@ -716,6 +717,7 @@ private fun VaultContent(ctx: Context, nav: NavStack, repo: FileRepo, key: Secre
             rows = listOf(
                 "名称" to e.name,
                 "大小" to e.size.toSizeText(),
+                "文件类型" to TypeDetect.labelOf(e.name),
                 "添加时间" to e.time.toRelativeTime(),
                 "原始位置" to e.orig.ifEmpty { "未记录" },
                 "加密方式" to "AES-256-GCM（密钥仅存于解锁凭证）",
