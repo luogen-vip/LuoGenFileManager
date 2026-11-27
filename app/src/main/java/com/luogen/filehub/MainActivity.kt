@@ -45,7 +45,12 @@ class MainActivity : ComponentActivity() {
         try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         // 进程被清理后重新打开：导航栈回到上次的位置，而不是永远回首页
         try { AppState.restoreSearchFilters() } catch (_: Throwable) {}
-        try { AppState.nav.restore(Prefs.navRoutes()) } catch (_: Throwable) {}
+        // 但要是这次是被别的 App“用罗根文件管家打开文件”拉起来的，就别再恢复上次的页面了，
+        // 否则会先闪一下（甚至停在上次的下载页），看起来像根本没打开文件
+        val fromExternal = intent?.action == Intent.ACTION_VIEW && intent?.data != null
+        if (!fromExternal) {
+            try { AppState.nav.restore(Prefs.navRoutes()) } catch (_: Throwable) {}
+        }
         handleExternalIntent(intent)
         try {
             androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
@@ -154,21 +159,27 @@ fun AppRoot() {
         }
     }
     // 外部 App 传来的文件：先复制到缓存，再按类型打开；失败给明确提示
-    LaunchedEffect(AppState.externalOpenUri) {
-        val uri = AppState.externalOpenUri ?: return@LaunchedEffect
-        AppState.externalOpenUri = null
-        val name = AppState.externalOpenName
-        val mime = AppState.externalOpenMime
-        val item = com.luogen.filehub.data.ExternalOpen.materialize(ctx, uri, name, mime)
-        if (item == null) {
-            android.widget.Toast.makeText(ctx, "无法读取这个文件（可能已被移动或没有访问权限）", android.widget.Toast.LENGTH_LONG).show()
-        } else {
-            try { openItem(ctx, nav, item, listOf(item)) } catch (_: Throwable) {
-                android.widget.Toast.makeText(ctx, "暂不支持打开这种文件", android.widget.Toast.LENGTH_SHORT).show()
+    // 注意：这里用 Channel 收，不要用 Compose 状态当 key —— 清空状态会取消正在处理的协程
+    LaunchedEffect(Unit) {
+        for (req in AppState.externalOpenQueue) {
+            AppState.externalBusy = req.name
+            val item = try {
+                com.luogen.filehub.data.ExternalOpen.materialize(ctx, req.uri, req.name, req.mime)
+            } finally {
+                AppState.externalBusy = null
+            }
+            if (item == null) {
+                android.widget.Toast.makeText(ctx, "无法读取这个文件（可能已被移动或没有访问权限）", android.widget.Toast.LENGTH_LONG).show()
+            } else {
+                try {
+                    openItem(ctx, nav, item, listOf(item))
+                } catch (t: Throwable) {
+                    android.widget.Toast.makeText(
+                        ctx, "这个文件暂时打不开：${item.name}", android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
-        AppState.externalOpenName = ""
-        AppState.externalOpenMime = ""
     }
 
     LaunchedEffect(AppState.audioOpenRequested) {
@@ -194,6 +205,29 @@ fun AppRoot() {
         }
     }
     AppNav(ctx, nav)
+
+    // 从别的 App 转进来的大文件要复制一份，复制期间给明确提示，别让人以为点了没反应
+    AppState.externalBusy?.let { busyName ->
+        Box(
+            Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color(0x88000000)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier
+                    .background(SurfaceDark, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 26.dp, vertical = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(color = BrandBlue, strokeWidth = 2.5.dp, modifier = Modifier.size(30.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("正在打开…", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                if (busyName.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(busyName, color = TextDim, fontSize = 12.sp, maxLines = 2)
+                }
+            }
+        }
+    }
 
     if (showPerm) {
         AlertDialog(
@@ -415,8 +449,14 @@ fun openItem(ctx: Context, nav: NavStack, item: com.luogen.filehub.model.FileIte
                 else -> if (com.luogen.filehub.data.TypeDetect.looksText(file)) {
                     nav.push(Screen.TextView(item.path))
                 } else if (item.path.startsWith(com.luogen.filehub.data.ExternalOpen.dir(ctx).absolutePath + File.separator)) {
-                    // 从别的 App 转进来的文件：不要再用系统选择器弹回自己，避免死循环
-                    android.widget.Toast.makeText(ctx, "暂不支持打开这种文件", android.widget.Toast.LENGTH_SHORT).show()
+                    // 从别的 App 转进来的文件、应用内确实预览不了：转给别的应用打开，
+                    // 并且把自己的入口排除掉，避免“选自己→再弹选择器→再选自己”的死循环
+                    val handed = com.luogen.filehub.data.FileOps.openWithOther(ctx, item.path, item.mime)
+                    if (!handed) {
+                        android.widget.Toast.makeText(
+                            ctx, "这个文件应用内打不开，也没有其他应用能打开它", android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 } else {
                     com.luogen.filehub.data.FileOps.openWith(ctx, item.path, item.mime)
                 }

@@ -100,9 +100,6 @@
                 <data android:mimeType="application/zstd" />
                 <data android:mimeType="application/x-iso9660-image" />
                 <data android:mimeType="application/x-compressed-tar" />
-                <data android:mimeType="application/x-compress" />
-                <data android:mimeType="application/vnd.ms-cab-compressed" />
-                <data android:mimeType="application/x-lzh-compressed" />
             </intent-filter>
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
@@ -111,43 +108,6 @@
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.android.package-archive" />
-                <data android:mimeType="application/x-authorware-bin" />
-                <data android:mimeType="application/java-archive" />
-            </intent-filter>
-            <intent-filter android:label="@string/app_name">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="application/octet-stream" />
-            </intent-filter>
-            <intent-filter android:label="@string/app_name">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="font/*" />
-                <data android:mimeType="application/font-woff" />
-                <data android:mimeType="application/vnd.ms-fontobject" />
-                <data android:mimeType="application/x-font-ttf" />
-            </intent-filter>
-            <intent-filter android:label="@string/app_name">
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="application/vnd.ms-excel" />
-                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-                <data android:mimeType="application/msword" />
-                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-                <data android:mimeType="application/vnd.ms-powerpoint" />
-                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
-                <data android:mimeType="application/epub+zip" />
-                <data android:mimeType="application/x-mobipocket-ebook" />
-                <data android:mimeType="application/vnd.amazon.ebook" />
             </intent-filter>
         </activity>
 

@@ -256,6 +256,33 @@ object FileOps {
         }
     }
 
+    /** 转给别的应用打开，但把“自己”从候选里排除，避免选来选去又回到本应用 */
+    fun openWithOther(ctx: Context, path: String, mime: String = ""): Boolean {
+        val f = File(path)
+        if (!f.exists()) return false
+        val uri = try {
+            FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", f)
+        } catch (_: Throwable) {
+            return false
+        }
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime.ifEmpty { TypeDetect.mimeOf(f.name) })
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                putExtra(
+                    Intent.EXTRA_EXCLUDE_COMPONENTS,
+                    arrayOf(android.content.ComponentName(ctx, com.luogen.filehub.ui.MainActivity::class.java))
+                )
+            } catch (_: Throwable) {}
+        }
+        return try {
+            ctx.startActivity(intent)
+            true
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     /** 安装 APK：未开启“安装未知应用”时先跳设置 */
     fun installApk(ctx: Context, path: String): Boolean {
         val f = File(path)
