@@ -374,6 +374,40 @@ fun ThumbBox(
     }
 }
 
+/**
+ * 当前列表里“最新”那一条的 key。
+ * 只算有真实修改时间的东西：文件夹（length 恒为 0、时间是目录 mtime）和已安装应用（没有文件时间）都不参与。
+ */
+fun newestKeyOf(items: List<FileItem>): String? =
+    items.asSequence()
+        .filter { it.modified > 0 && !it.isDir && !isAppPackageEntry(it) }
+        .maxByOrNull { it.modified }?.key
+
+/** 最新标记的文案：按分类换成更直白的说法，一眼就知道是什么意思。 */
+fun newestBadgeOf(cat: Cat?): String = when (cat) {
+    Cat.DOWNLOAD -> "最新下载"
+    Cat.APP -> "最新安装包"
+    Cat.ARCHIVE -> "最新压缩包"
+    Cat.DOC -> "最新文档"
+    Cat.AUDIO -> "最新音频"
+    Cat.VIDEO -> "最新视频"
+    Cat.IMAGE -> "最新图片"
+    else -> "最新"
+}
+
+/** 列表里的“最新”小标签。 */
+@Composable
+fun NewestPill(text: String) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(BrandBlue.copy(alpha = 0.18f))
+            .padding(horizontal = 6.dp, vertical = 1.5.dp)
+    ) {
+        Text(text, color = BrandBlue, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileRow(
@@ -382,6 +416,7 @@ fun FileRow(
     selectionMode: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    badge: String? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
     Row(
@@ -414,14 +449,21 @@ fun FileRow(
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                item.label.ifEmpty { item.name },
-                color = MaterialTheme.colorScheme.onBackground,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    item.label.ifEmpty { item.name },
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (!badge.isNullOrBlank()) {
+                    Spacer(Modifier.width(6.dp))
+                    NewestPill(badge)
+                }
+            }
             Spacer(Modifier.height(3.dp))
             Text(
                 buildString {

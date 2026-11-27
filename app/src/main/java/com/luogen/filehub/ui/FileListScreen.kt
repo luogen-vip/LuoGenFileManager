@@ -134,6 +134,12 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
 
     val display = remember(filtered, sortMode, asc) { Sorter.sort(filtered, sortMode, asc) }
 
+    // 只有在“按时间 + 倒序”时，列表第一条才是最新的，这时才给最新那条打标记，避免换排序后标记位置让人误会
+    val newestKey = remember(display, sortMode, asc) {
+        if (sortMode == SortMode.TIME && !asc) newestKeyOf(display) else null
+    }
+    val newestBadge = remember(cat) { newestBadgeOf(cat) }
+
     val grouped = remember(display, sortMode, asc, cat) {
         if (sortMode == SortMode.TIME && !asc && (cat == Cat.IMAGE || cat == Cat.VIDEO || cat == Cat.DOWNLOAD)) {
             display.groupBy { it.modified.toDayTitle() }.entries
@@ -302,7 +308,8 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                 fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextMain
                             )
                             Text(
-                                if (loading) "正在加载…" else "共 ${display.size} 项",
+                                if (loading) "正在加载…" else if (sortMode == SortMode.TIME && !asc)
+                                    "共 ${display.size} 项 · 最新在前" else "共 ${display.size} 项",
                                 fontSize = 11.sp, color = TextDim
                             )
                         }
@@ -512,6 +519,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                     val it0 = g.list[idx]
                                     GridCell(
                                         item = it0,
+                                        badge = if (it0.key == newestKey) newestBadge else null,
                                         selected = selected.contains(it0.key),
                                         selectionMode = selected.isNotEmpty(),
                                         onOpen = { openByCat(ctx, nav, it0, display, cat, appTab, toast = { toast = it }) },
@@ -524,6 +532,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                 val it0 = display[idx]
                                 GridCell(
                                     item = it0,
+                                    badge = if (it0.key == newestKey) newestBadge else null,
                                     selected = selected.contains(it0.key),
                                     selectionMode = selected.isNotEmpty(),
                                     onOpen = { openByCat(ctx, nav, it0, display, cat, appTab, toast = { toast = it }) },
@@ -542,6 +551,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                     val it0 = g.list[idx]
                                     ListCell(
                                         ctx = ctx, nav = nav, item = it0, siblings = display, cat = cat, appTab = appTab,
+                                        badge = if (it0.key == newestKey) newestBadge else null,
                                         selected = selected.contains(it0.key),
                                         selectionMode = selected.isNotEmpty(),
                                         onToggle = { toggleSel(selected, it0.key) { selected = it } },
@@ -558,6 +568,7 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
                                 val it0 = display[idx]
                                 ListCell(
                                     ctx = ctx, nav = nav, item = it0, siblings = display, cat = cat, appTab = appTab,
+                                    badge = if (it0.key == newestKey) newestBadge else null,
                                     selected = selected.contains(it0.key),
                                     selectionMode = selected.isNotEmpty(),
                                     onToggle = { toggleSel(selected, it0.key) { selected = it } },
@@ -842,6 +853,7 @@ private fun openByCat(
 @Composable
 private fun GridCell(
     item: FileItem,
+    badge: String? = null,
     selected: Boolean,
     selectionMode: Boolean,
     onOpen: () -> Unit,
@@ -858,6 +870,18 @@ private fun GridCell(
             )
     ) {
         ThumbBox(Modifier.fillMaxSize(), item, corner = 12)
+        if (!badge.isNullOrBlank() && !selectionMode) {
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(BrandBlue.copy(alpha = 0.92f))
+                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+            ) {
+                Text(badge, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+        }
         if (selectionMode) {
             Box(
                 Modifier
@@ -892,6 +916,7 @@ private fun ListCell(
     siblings: List<FileItem>,
     cat: Cat,
     appTab: Int,
+    badge: String? = null,
     selected: Boolean,
     selectionMode: Boolean,
     onToggle: () -> Unit,
@@ -910,6 +935,7 @@ private fun ListCell(
         item = item,
         selected = selected,
         selectionMode = selectionMode,
+        badge = badge,
         onClick = {
             if (selectionMode) onToggle()
             else openByCat(ctx, nav, item, siblings, cat, appTab, onMsg)
