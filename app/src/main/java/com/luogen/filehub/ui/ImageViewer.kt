@@ -236,7 +236,7 @@ private fun ImagePage(
     var size by remember { mutableStateOf(IntSize.Zero) }
     var paged by remember { mutableStateOf(false) }
     LaunchedEffect(scale) { onZoomChange(scale > 1.01f) }
-    BoxWithConstraints(
+    Box(
         Modifier
             .fillMaxSize()
             .onSizeChanged { size = it }

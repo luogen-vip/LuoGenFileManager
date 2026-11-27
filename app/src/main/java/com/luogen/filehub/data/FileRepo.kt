@@ -325,20 +325,16 @@ class FileRepo(private val ctx: Context) {
                 val state = v.state
                 if (dir == null || !dir.exists() || state != Environment.MEDIA_MOUNTED) return@forEach
                 var total = 0L; var free = 0L
-                try {
+                // 统一用 getUuidForPath 拿卷的 UUID：内部存储、SD 卡都对，也不用碰 API 26 才有的 UUID_DEFAULT
+                if (ssm != null && Build.VERSION.SDK_INT >= 26) {
                     try {
-                        val uuid = StorageManager.UUID_DEFAULT.let { def -> if (v.isPrimary) def else null }
-                        if (ssm != null && uuid != null) {
-                            total = ssm.getTotalBytes(uuid)
-                            free = ssm.getFreeBytes(uuid)
-                        } else if (ssm != null && !v.isPrimary) {
-                            // 可移动存储：用反射拿 UUID，拿不到就退回 StatFs
-                            val u = v.uuid?.let { java.util.UUID.fromString(it) } ?: java.util.UUID.nameUUIDFromBytes(v.uuid?.toByteArray() ?: ByteArray(0))
-                            total = ssm.getTotalBytes(u)
-                            free = ssm.getFreeBytes(u)
-                        }
-                    } catch (_: Throwable) {}
-                } catch (_: Throwable) {}
+                        val uuid = sm.getUuidForPath(dir)
+                        total = ssm.getTotalBytes(uuid)
+                        free = ssm.getFreeBytes(uuid)
+                    } catch (_: Throwable) {
+                        total = 0L; free = 0L
+                    }
+                }
                 if (total <= 0) {
                     try {
                         val st = StatFs(dir.absolutePath)

@@ -134,9 +134,10 @@ fun FileListScreen(ctx: Context, nav: NavStack, repo: FileRepo, cat: Cat) {
 
     val display = remember(filtered, sortMode, asc) { Sorter.sort(filtered, sortMode, asc) }
 
-    // 只有在“按时间 + 倒序”时，列表第一条才是最新的，这时才给最新那条打标记，避免换排序后标记位置让人误会
-    val newestKey = remember(display, sortMode, asc) {
-        if (sortMode == SortMode.TIME && !asc) newestKeyOf(display) else null
+    // 只有在“按时间 + 倒序”时，列表第一条才是最新的，这时才给最新那条打标记，避免换排序后标记位置让人误会。
+    // 图片 / 视频分类不打标记：它们是缩略图墙，标签会挡在画面上，而且网格第一屏本身就是最新的
+    val newestKey = remember(display, sortMode, asc, cat) {
+        if (sortMode == SortMode.TIME && !asc && cat != Cat.IMAGE && cat != Cat.VIDEO) newestKeyOf(display) else null
     }
     val newestBadge = remember(cat) { newestBadgeOf(cat) }
 

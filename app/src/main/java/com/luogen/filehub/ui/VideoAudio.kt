@@ -59,6 +59,7 @@ import java.io.File
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun VideoViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
     val ctx = LocalContext.current
