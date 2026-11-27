@@ -3,6 +3,7 @@ package com.luogen.filehub.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import com.luogen.filehub.model.FileItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,6 +30,48 @@ object ExternalOpen {
         return name.ifBlank { fallback.ifBlank { "外部文件" } }
     }
 
+    /** 文件大概多大：拿不到就返回 null */
+    fun sizeOf(ctx: Context, uri: Uri): Long? {
+        try {
+            if (uri.scheme == "file") return File(uri.path ?: return null).length()
+            ctx.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) return c.getLong(0)
+            }
+        } catch (_: Throwable) {
+        }
+        return null
+    }
+
+    /** 传进来的 mime 可能为空，用后缀兜底 */
+    fun guessMime(name: String, mime: String): String {
+        if (mime.isNotBlank() && mime != "application/octet-stream") return mime
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: mime
+    }
+
+    /** 同步版本：小文件直接在调用线程复制，保证一进来就能打开，不依赖任何界面/协程时序 */
+    fun materializeNow(ctx: Context, uri: Uri, name: String, mime: String): FileItem? {
+        return try {
+            if (uri.scheme == "file") {
+                val f = File(uri.path ?: return null)
+                if (!f.exists() || !f.isFile) return null
+                return FileItem(
+                    path = f.absolutePath, name = f.name, size = f.length(),
+                    modified = f.lastModified(), mime = guessMime(f.name, mime)
+                )
+            }
+            val safeName = name.replace('/', '_').replace('\\', '_').ifBlank { "外部文件" }
+            val target = unique(dir(ctx), safeName)
+            if (!copyTo(ctx, uri, target)) return null
+            FileItem(
+                path = target.absolutePath, name = target.name, size = target.length(),
+                modified = target.lastModified(), mime = guessMime(target.name, mime)
+            )
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
     suspend fun materialize(ctx: Context, uriString: String, name: String, mime: String): FileItem? =
         withContext(Dispatchers.IO) {
             try {
@@ -38,25 +81,45 @@ object ExternalOpen {
                     if (!f.exists() || !f.isFile) return@withContext null
                     return@withContext FileItem(
                         path = f.absolutePath, name = f.name, size = f.length(),
-                        modified = f.lastModified(), mime = mime.ifEmpty { TypeDetect.mimeOf(f.name) }
+                        modified = f.lastModified(), mime = guessMime(f.name, mime)
                     )
                 }
                 prune(ctx)
                 val safeName = name.replace('/', '_').replace('\\', '_').ifBlank { "外部文件" }
                 val target = unique(dir(ctx), safeName)
-                val input = ctx.contentResolver.openInputStream(uri) ?: return@withContext null
-                input.use { ins ->
-                    target.outputStream().use { out -> ins.copyTo(out, 64 * 1024) }
-                }
-                if (!target.exists() || target.length() == 0L) return@withContext null
+                if (!copyTo(ctx, uri, target)) return@withContext null
                 FileItem(
                     path = target.absolutePath, name = target.name, size = target.length(),
-                    modified = target.lastModified(), mime = mime.ifEmpty { TypeDetect.mimeOf(target.name) }
+                    modified = target.lastModified(), mime = guessMime(target.name, mime)
                 )
             } catch (_: Throwable) {
                 null
             }
         }
+
+
+    /** 把 uri 的内容写进 target：先试 openInputStream，不行再用 ParcelFileDescriptor 兜底 */
+    private fun copyTo(ctx: Context, uri: Uri, target: File): Boolean {
+        try {
+            val input = ctx.contentResolver.openInputStream(uri)
+            if (input != null) {
+                input.use { ins -> target.outputStream().use { out -> ins.copyTo(out, 64 * 1024) } }
+                if (target.exists() && target.length() > 0L) return true
+            }
+        } catch (_: Throwable) {
+        }
+        try {
+            val pfd = ctx.contentResolver.openFileDescriptor(uri, "r") ?: return false
+            pfd.use { d ->
+                java.io.FileInputStream(d.fileDescriptor).use { ins ->
+                    target.outputStream().use { out -> ins.copyTo(out, 64 * 1024) }
+                }
+            }
+            return target.exists() && target.length() > 0L
+        } catch (_: Throwable) {
+            return false
+        }
+    }
 
     /** 只保留最近 7 天从外部打开过的临时副本，避免缓存越积越大 */
     private fun prune(ctx: Context) {

@@ -27,9 +27,25 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.luogen.filehub.data.Prefs
 import com.luogen.filehub.ui.AppNav
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    /** 只用于大文件的后台复制；页面不在也不影响已经发起的一次打开 */
+    /** 已经处理过的外部文件，避免同一个 intent 在 onResume 里被重复打开 */
+    private var handledIntentUri: String? = null
+
+    private val extScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate
+    )
+
+    override fun onDestroy() {
+        try { extScope.cancel() } catch (_: Throwable) {}
+        try { com.luogen.filehub.data.MediaWatcher.stop() } catch (_: Throwable) {}
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (intent?.getBooleanExtra("open_audio", false) == true) AppState.audioOpenRequested = true
         if (intent?.getBooleanExtra("open_ftp", false) == true) AppState.ftpOpenRequested = true
@@ -45,13 +61,14 @@ class MainActivity : ComponentActivity() {
         try { com.luogen.filehub.data.AudioHub.ensure(this) } catch (_: Throwable) {}
         // 进程被清理后重新打开：导航栈回到上次的位置，而不是永远回首页
         try { AppState.restoreSearchFilters() } catch (_: Throwable) {}
-        // 但要是这次是被别的 App“用罗根文件管家打开文件”拉起来的，就别再恢复上次的页面了，
-        // 否则会先闪一下（甚至停在上次的下载页），看起来像根本没打开文件
-        val fromExternal = intent?.action == Intent.ACTION_VIEW && intent?.data != null
-        if (!fromExternal) {
+        // 被别的 App「用罗根文件管家打开」拉起来时：不恢复上次页面，直接把文件打开成首屏
+        val req = externalReqOf(intent)
+        if (req != null) {
+            try { AppState.nav.popToHome() } catch (_: Throwable) {}
+            startExternalOpen(req)
+        } else {
             try { AppState.nav.restore(Prefs.navRoutes()) } catch (_: Throwable) {}
         }
-        handleExternalIntent(intent)
         try {
             androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                 .isAppearanceLightStatusBars = true
@@ -81,6 +98,11 @@ class MainActivity : ComponentActivity() {
         } catch (_: Throwable) {}
         // 在别的 App 下载/删除/移动后回到本 App：立刻清缓存重读
         try { AppState.markDataChanged() } catch (_: Throwable) {}
+        // 兜底：万一 onCreate 那一下没接到（系统重建、intent 被后置等），回到前台时再认一次
+        try {
+            val req = externalReqOf(intent)
+            if (req != null && req.uri.toString() != handledIntentUri) startExternalOpen(req)
+        } catch (_: Throwable) {}
     }
 
     override fun onStop() {
@@ -88,27 +110,97 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
-    override fun onDestroy() {
-        try { com.luogen.filehub.data.MediaWatcher.stop() } catch (_: Throwable) {}
-        super.onDestroy()
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra("open_audio", false)) AppState.audioOpenRequested = true
         if (intent.getBooleanExtra("open_ftp", false)) AppState.ftpOpenRequested = true
-        handleExternalIntent(intent)
+        val req = externalReqOf(intent)
+        if (req != null) {
+            try { AppState.nav.popToHome() } catch (_: Throwable) {}
+            startExternalOpen(req)
+        }
     }
 
-    /** 别的 App 选择「用罗根文件管家打开」时，把文件接进来交给对应查看器 */
-    private fun handleExternalIntent(i: Intent?) {
-        if (i == null || i.action != Intent.ACTION_VIEW) return
-        val uri = i.data ?: return
-        if (uri.scheme.isNullOrBlank()) return
+    private data class OpenReq(val uri: Uri, val name: String, val mime: String)
+
+    /** 判断这次启动是不是「打开某个文件」，并把 uri / 文件名 / mime 取出来 */
+    private fun externalReqOf(i: Intent?): OpenReq? {
+        if (i == null) return null
+        val action = i.action
+        if (action != Intent.ACTION_VIEW && action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return null
+        val uri = i.data ?: run {
+            @Suppress("DEPRECATION")
+            i.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        } ?: return null
+        val scheme = uri.scheme?.lowercase()
+        if (scheme.isNullOrBlank()) return null
+        return try {
+            // 有些文件管理器不带 type，从 content provider 或后缀再取一次，避免“能选到我们、却判定不出类型”
+            val mime = i.type?.takeIf { it.isNotBlank() && it != "application/octet-stream" }
+                ?: runCatching { contentResolver.getType(uri) }.getOrNull().orEmpty()
+            OpenReq(uri, com.luogen.filehub.data.ExternalOpen.nameOf(this, uri, uri.lastPathSegment ?: "外部文件"), mime)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
+     * 真正打开外部传来的文件。
+     * 小文件（图片等）在首帧之前同步复制完并直接把查看器压栈 —— 不依赖 Compose 生命周期、不依赖协程时序，
+     * 一进来看到的就是文件本身，而不是首页。
+     */
+    private fun startExternalOpen(req: OpenReq) {
+        handledIntentUri = req.uri.toString()
+        // 立刻给一个“收到了”的反馈：能看见这句，就说明系统确实把文件交给我们了
+        toast("正在打开：${req.name}")
+        val eo = com.luogen.filehub.data.ExternalOpen
+        val size = try { eo.sizeOf(this, req.uri) } catch (_: Throwable) { null }
+        val small = (size != null && size in 1..(12L * 1024 * 1024)) ||
+            (size == null && req.mime.startsWith("image/"))
+        if (small) {
+            AppState.externalBusy = req.name
+            val item = try {
+                eo.materializeNow(this, req.uri, req.name, req.mime)
+            } finally {
+                AppState.externalBusy = null
+            }
+            if (item != null) {
+                openSafely(item)
+            } else {
+                toast("读取不到文件内容（可能另一个应用没有授予读取权限）")
+            }
+            return
+        }
+        // 大文件或应用已在前台：后台复制，期间显示「正在打开…」
+        AppState.externalBusy = req.name
+        extScope.launch {
+            val item = try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    eo.materialize(this@MainActivity, req.uri.toString(), req.name, req.mime)
+                }
+            } finally {
+                AppState.externalBusy = null
+            }
+            if (item == null) {
+                toast("读取不到文件内容（可能另一个应用没有授予读取权限）")
+            } else {
+                openSafely(item)
+            }
+        }
+    }
+
+    private fun openSafely(item: com.luogen.filehub.model.FileItem) {
         try {
-            val name = com.luogen.filehub.data.ExternalOpen.nameOf(this, uri, uri.lastPathSegment ?: "外部文件")
-            AppState.requestExternalOpen(uri.toString(), name, i.type ?: "")
+            openItem(this, AppState.nav, item, listOf(item))
+        } catch (t: Throwable) {
+            toast("这个文件打不开：${item.name}")
+        }
+    }
+
+    private fun toast(msg: String) {
+        try {
+            android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show()
         } catch (_: Throwable) {
         }
     }
@@ -158,30 +250,6 @@ fun AppRoot() {
             try { nav.push(Screen.Ftp) } catch (_: Throwable) {}
         }
     }
-    // 外部 App 传来的文件：先复制到缓存，再按类型打开；失败给明确提示
-    // 注意：这里用 Channel 收，不要用 Compose 状态当 key —— 清空状态会取消正在处理的协程
-    LaunchedEffect(Unit) {
-        for (req in AppState.externalOpenQueue) {
-            AppState.externalBusy = req.name
-            val item = try {
-                com.luogen.filehub.data.ExternalOpen.materialize(ctx, req.uri, req.name, req.mime)
-            } finally {
-                AppState.externalBusy = null
-            }
-            if (item == null) {
-                android.widget.Toast.makeText(ctx, "无法读取这个文件（可能已被移动或没有访问权限）", android.widget.Toast.LENGTH_LONG).show()
-            } else {
-                try {
-                    openItem(ctx, nav, item, listOf(item))
-                } catch (t: Throwable) {
-                    android.widget.Toast.makeText(
-                        ctx, "这个文件暂时打不开：${item.name}", android.widget.Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-    }
-
     LaunchedEffect(AppState.audioOpenRequested) {
         if (AppState.audioOpenRequested) {
             AppState.audioOpenRequested = false
@@ -412,7 +480,10 @@ private fun routeToScreen(route: String): Screen? {
 /** 统一的“打开文件”入口：按类型跳对应查看器 */
 fun openItem(ctx: Context, nav: NavStack, item: com.luogen.filehub.model.FileItem, siblings: List<com.luogen.filehub.model.FileItem>) {
     val file = File(item.path)
-    if (!file.exists()) return
+    if (!file.exists()) {
+        android.widget.Toast.makeText(ctx, "文件不存在或已被移动：${item.name}", android.widget.Toast.LENGTH_LONG).show()
+        return
+    }
     // 搜索结果里可能混着文件夹：点文件夹必须进目录，不能当文件丢给系统
     if (file.isDirectory) {
         nav.push(Screen.Browse(file.absolutePath))

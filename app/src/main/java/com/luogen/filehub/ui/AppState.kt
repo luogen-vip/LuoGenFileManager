@@ -30,22 +30,7 @@ object AppState {
     var dataVersion by mutableStateOf(0)
     var ftpOpenRequested by mutableStateOf(false)
 
-    /** 别的 App「用其他应用打开」交给我们的文件（content:// 或 file://） */
-    data class ExternalOpenReq(val uri: String, val name: String, val mime: String)
-
-    /**
-     * 用队列而不是 Compose 状态：状态被清空会重建 effect，正在复制/打开文件的协程会被当场取消，
-     * 表现就是“点了应用却只是回到上次页面”。队列只进不出，绝对不丢请求。
-     */
-    val externalOpenQueue = kotlinx.coroutines.channels.Channel<ExternalOpenReq>(
-        kotlinx.coroutines.channels.Channel.UNLIMITED
-    )
-
-    fun requestExternalOpen(uri: String, name: String, mime: String) {
-        externalOpenQueue.trySend(ExternalOpenReq(uri, name, mime))
-    }
-
-    /** 正在从别的 App 接收文件（复制到缓存）时显示的名字，只用来做提示，不参与任何 effect 的 key */
+    /** 正在从别的 App 接收文件（复制到缓存）时显示的名字，只用来做提示 */
     var externalBusy by mutableStateOf<String?>(null)
 
     // ---------- 滚动位置 ----------

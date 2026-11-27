@@ -15,7 +15,10 @@ fun AppNav(ctx: Context, nav: NavStack) {
 
     // 每次导航变化立刻落盘：被后台清理后重新打开仍回到这一页/这一层
     LaunchedEffect(nav.current) {
-        try { Prefs.saveNavRoutes(nav.routes()) } catch (_: Throwable) {}
+        // 但「从外部 App 打开」产生的查看页不落盘：它指向缓存副本，过期清理后恢复出来只会是坏页面
+        if (!refsExternalCache(ctx, nav.current)) {
+            try { Prefs.saveNavRoutes(nav.routes()) } catch (_: Throwable) {}
+        }
     }
 
     BackHandler(enabled = nav.stack.size > 1) { nav.pop() }
@@ -47,4 +50,19 @@ fun AppNav(ctx: Context, nav: NavStack) {
         is Screen.Ftp -> FtpScreen(ctx, nav)
         is Screen.VaultViewer -> ArchiveViewerScreen(ctx, nav, s.cachedPath)
     }
+}
+
+/** 这个页面的内容是不是来自「外部打开」的缓存副本 */
+private fun refsExternalCache(ctx: Context, s: Screen): Boolean {
+    val dir = com.luogen.filehub.data.ExternalOpen.dir(ctx).absolutePath + java.io.File.separator
+    val p = when (s) {
+        is Screen.ImageView -> s.paths.firstOrNull()
+        is Screen.VideoView -> s.paths.firstOrNull()
+        is Screen.AudioView -> s.paths.firstOrNull()
+        is Screen.TextView -> s.path
+        is Screen.PdfView -> s.path
+        is Screen.ArchiveView -> s.path
+        else -> null
+    }
+    return p != null && p.startsWith(dir)
 }
