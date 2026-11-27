@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
         // 进程被清理后重新打开：导航栈回到上次的位置，而不是永远回首页
         try { AppState.restoreSearchFilters() } catch (_: Throwable) {}
         try { AppState.nav.restore(Prefs.navRoutes()) } catch (_: Throwable) {}
+        handleExternalIntent(intent)
         try {
             androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
                 .isAppearanceLightStatusBars = true
@@ -92,6 +93,19 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.getBooleanExtra("open_audio", false)) AppState.audioOpenRequested = true
         if (intent.getBooleanExtra("open_ftp", false)) AppState.ftpOpenRequested = true
+        handleExternalIntent(intent)
+    }
+
+    /** 别的 App 选择「用罗根文件管家打开」时，把文件接进来交给对应查看器 */
+    private fun handleExternalIntent(i: Intent?) {
+        if (i == null || i.action != Intent.ACTION_VIEW) return
+        val uri = i.data ?: return
+        if (uri.scheme.isNullOrBlank()) return
+        try {
+            val name = com.luogen.filehub.data.ExternalOpen.nameOf(this, uri, uri.lastPathSegment ?: "外部文件")
+            AppState.requestExternalOpen(uri.toString(), name, i.type ?: "")
+        } catch (_: Throwable) {
+        }
     }
 }
 
@@ -139,6 +153,24 @@ fun AppRoot() {
             try { nav.push(Screen.Ftp) } catch (_: Throwable) {}
         }
     }
+    // 外部 App 传来的文件：先复制到缓存，再按类型打开；失败给明确提示
+    LaunchedEffect(AppState.externalOpenUri) {
+        val uri = AppState.externalOpenUri ?: return@LaunchedEffect
+        AppState.externalOpenUri = null
+        val name = AppState.externalOpenName
+        val mime = AppState.externalOpenMime
+        val item = com.luogen.filehub.data.ExternalOpen.materialize(ctx, uri, name, mime)
+        if (item == null) {
+            android.widget.Toast.makeText(ctx, "无法读取这个文件（可能已被移动或没有访问权限）", android.widget.Toast.LENGTH_LONG).show()
+        } else {
+            try { openItem(ctx, nav, item, listOf(item)) } catch (_: Throwable) {
+                android.widget.Toast.makeText(ctx, "暂不支持打开这种文件", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        AppState.externalOpenName = ""
+        AppState.externalOpenMime = ""
+    }
+
     LaunchedEffect(AppState.audioOpenRequested) {
         if (AppState.audioOpenRequested) {
             AppState.audioOpenRequested = false
@@ -382,6 +414,9 @@ fun openItem(ctx: Context, nav: NavStack, item: com.luogen.filehub.model.FileIte
                 // 未知后缀（比如自己改的 tx2）：先嗅探内容，是文本就用内置查看器，不再甩给系统
                 else -> if (com.luogen.filehub.data.TypeDetect.looksText(file)) {
                     nav.push(Screen.TextView(item.path))
+                } else if (item.path.startsWith(com.luogen.filehub.data.ExternalOpen.dir(ctx).absolutePath + File.separator)) {
+                    // 从别的 App 转进来的文件：不要再用系统选择器弹回自己，避免死循环
+                    android.widget.Toast.makeText(ctx, "暂不支持打开这种文件", android.widget.Toast.LENGTH_SHORT).show()
                 } else {
                     com.luogen.filehub.data.FileOps.openWith(ctx, item.path, item.mime)
                 }

@@ -45,6 +45,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/**
+ * 「已安装应用」的 name 是包名（如 com.tencent.mm），最后一个点后面是域名后缀，
+ * 不是文件扩展名，不能显示成「扩展名 MM」或「文件 · MM」。
+ */
+fun isAppPackageEntry(item: FileItem): Boolean =
+    item.packageName.isNotEmpty() && !item.name.lowercase().endsWith(".apk")
+
 /** 文件夹：目录的 File.length() 恒为 0，不能拿 0 B 当真实大小；兼容 MediaStore 目录行 */
 fun isFolder(item: FileItem): Boolean =
     item.isDir || (item.size == 0L && item.path.isNotEmpty() && try { File(item.path).isDirectory } catch (_: Throwable) { false })
@@ -419,9 +426,19 @@ fun FileRow(
             Text(
                 buildString {
                     val folder = isFolder(item)
-                    append(if (folder) "文件夹" else item.size.toSizeText())
-                    if (!folder && item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime, java.io.File(item.path)))
-                    append(" · ").append(item.modified.toRelativeTime())
+                    when {
+                        isAppPackageEntry(item) -> {
+                            append("已安装应用")
+                            if (item.versionName.isNotEmpty()) append(" · 版本 ").append(item.versionName)
+                            if (item.extra.isNotEmpty()) append(" · ").append(item.extra)
+                        }
+                        folder -> append("文件夹")
+                        else -> {
+                            append(item.size.toSizeText())
+                            if (item.ext.isNotEmpty()) append(" · ").append(com.luogen.filehub.data.TypeDetect.labelOf(item.name, item.mime, java.io.File(item.path)))
+                        }
+                    }
+                    if (item.modified > 0) append(" · ").append(item.modified.toRelativeTime())
                 },
                 color = TextDim,
                 fontSize = 12.sp,

@@ -1055,18 +1055,39 @@ internal fun ActionPanel(actions: List<ActionSpec>) {
 
 private fun infoRows(item: FileItem): List<Pair<String, String>> {
     val rows = ArrayList<Pair<String, String>>()
+    val folder = isFolder(item)
+    val installedApp = isAppPackageEntry(item)
+    if (installedApp) {
+        // 已安装应用：包名最后一段只是反向域名，不是扩展名，这里绝不显示成扩展名
+        rows.add("应用名" to item.label.ifEmpty { item.name })
+        rows.add("包名" to item.packageName)
+        if (item.versionName.isNotEmpty()) rows.add("版本" to item.versionName)
+        rows.add("大小" to item.size.toSizeText())
+        rows.add("类型" to "已安装应用（Android App）")
+        if (item.extra.isNotEmpty()) rows.add("来源" to item.extra)
+        if (item.path.isNotEmpty()) rows.add("安装包路径" to item.path)
+        return rows
+    }
     rows.add("名称" to item.name)
-    if (item.label.isNotEmpty()) rows.add("应用名" to item.label)
+    if (item.label.isNotEmpty() && item.label != item.name) rows.add("应用名" to item.label)
     if (item.packageName.isNotEmpty()) rows.add("包名" to item.packageName)
     if (item.versionName.isNotEmpty()) rows.add("版本" to item.versionName)
-    val folder = isFolder(item)
     rows.add("大小" to if (folder) "文件夹（不统计总大小）" else item.size.toSizeText())
     if (item.modified > 0) rows.add("修改时间" to item.modified.toFullTime())
     if (!folder && item.ext.isNotEmpty()) rows.add("扩展名" to item.ext.uppercase())
-    rows.add("文件类型" to if (folder) "文件夹" else TypeDetect.labelOf(item.name, item.mime))
+    rows.add(
+        "文件类型" to when {
+            folder -> "文件夹"
+            item.ext == "apk" -> "APK 安装包"
+            item.ext == "xapk" || item.ext == "apks" -> "APK 安装包（多包）"
+            else -> TypeDetect.labelOf(item.name, item.mime)
+        }
+    )
     if (item.path.isNotEmpty()) rows.add("完整路径" to item.path)
     val f = File(item.path)
-    if (f.exists() && !f.isDirectory) {
+    // APK/XAPK 本身是 ZIP 容器，做“文件头识别”只会得出 ZIP，反而误导，直接跳过
+    val skipMagic = folder || item.ext in setOf("apk", "xapk", "apks", "aab")
+    if (!skipMagic && f.exists() && f.isFile) {
         val magic = TypeDetect.detectByMagic(f)
         rows.add("文件头识别" to (magic?.uppercase() ?: "无法识别"))
         TypeDetect.mismatchHint(f)?.let { rows.add("提示" to it) }

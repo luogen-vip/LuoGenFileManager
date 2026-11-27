@@ -30,6 +30,17 @@ object AppState {
     var dataVersion by mutableStateOf(0)
     var ftpOpenRequested by mutableStateOf(false)
 
+    /** 别的 App「用其他应用打开」交给我们的文件（content:// 或 file://） */
+    var externalOpenUri by mutableStateOf<String?>(null)
+    var externalOpenName by mutableStateOf("")
+    var externalOpenMime by mutableStateOf("")
+
+    fun requestExternalOpen(uri: String, name: String, mime: String) {
+        externalOpenName = name
+        externalOpenMime = mime
+        externalOpenUri = uri
+    }
+
     // ---------- 滚动位置 ----------
     private val scroll = HashMap<String, Int>()
     private val scrollOffsets = HashMap<String, Int>()

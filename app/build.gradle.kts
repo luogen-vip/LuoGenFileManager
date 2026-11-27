@@ -12,8 +12,8 @@ android {
         applicationId = "com.luogen.filehub"
         minSdk = 24
         targetSdk = 34
-        versionCode = 29
-        versionName = "1.6.3"
+        versionCode = 30
+        versionName = "1.6.4"
     }
 
     buildTypes {
