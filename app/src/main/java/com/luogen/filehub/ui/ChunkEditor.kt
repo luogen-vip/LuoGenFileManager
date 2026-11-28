@@ -20,6 +20,10 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -92,10 +96,20 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     var askExit by remember { mutableStateOf(false) }
     var openInfo by remember { mutableStateOf(false) }
     var truncated by remember(path) { mutableStateOf(false) }
+    var reloadKey by remember(path) { mutableStateOf(0) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var askClear by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     val maxBytes = 32L * 1024 * 1024
 
-    LaunchedEffect(path) {
+    // 小文件不分块：一个输入框装得下，全选删除就是整篇全选
+    val blockChars = if (file.length() <= 128L * 1024) Int.MAX_VALUE else 8000
+
+    LaunchedEffect(path, reloadKey) {
+        loaded = false
+        loadError = null
+        blocks.clear()
         withContext(Dispatchers.IO) {
             try {
                 binary = !sampleLooksText(file)
@@ -115,12 +129,12 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                                 if (buf[i] == '\n') {
                                     sb.append(buf, start, i - start + 1)
                                     start = i + 1
-                                    if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                                    if (sb.length >= blockChars) { blocks.add(sb.toString()); sb.setLength(0) }
                                 }
                                 i++
                             }
                             if (start < n) sb.append(buf, start, n - start)
-                            if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                            if (sb.length >= blockChars) { blocks.add(sb.toString()); sb.setLength(0) }
                             remain -= n
                         }
                         if (sb.isNotEmpty()) blocks.add(sb.toString())
@@ -141,12 +155,12 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                             if (buf[i] == '\n') {
                                 sb.append(buf, start, i - start + 1)
                                 start = i + 1
-                                if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                                if (sb.length >= blockChars) { blocks.add(sb.toString()); sb.setLength(0) }
                             }
                             i++
                         }
                         if (start < n) sb.append(buf, start, n - start)
-                        if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                        if (sb.length >= blockChars) { blocks.add(sb.toString()); sb.setLength(0) }
                     }
                     if (sb.isNotEmpty()) blocks.add(sb.toString())
                 }
@@ -159,10 +173,10 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     }
 
     fun discard() {
-        origin.forEach { (i, t) -> if (i in blocks.indices) blocks[i] = t }
         origin.clear()
         dirty = false
         editMode = false
+        reloadKey++
     }
 
     fun doSave() {
@@ -248,6 +262,24 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                                 tint = if (editMode) GoodGreen else BrandBlue
                             )
                         }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, null, tint = TextDim)
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("清空全文", fontSize = 13.sp) },
+                                    onClick = { menuOpen = false; askClear = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("放弃修改并重新载入", fontSize = 13.sp) },
+                                    onClick = {
+                                        menuOpen = false
+                                        origin.clear(); dirty = false; editMode = false; reloadKey++
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = BgDeep)
@@ -277,7 +309,7 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                 !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = BrandBlue)
                 }
-                else -> LazyColumn(Modifier.fillMaxSize()) {
+                else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     if (truncated) {
                         item {
                             Surface(color = WarnAmber.copy(alpha = 0.12f)) {
@@ -305,6 +337,26 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                 }
             }
         }
+    }
+
+    if (askClear) {
+        AlertDialog(
+            onDismissRequest = { askClear = false },
+            title = { Text("清空全文？") },
+            text = { Text("会把整篇内容清空成空白，退出编辑前不会写入文件；想恢复可以点「不保存」或菜单里的「放弃修改并重新载入」。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    askClear = false
+                    blocks.clear()
+                    blocks.add("")
+                    editMode = true
+                    dirty = true
+                    scope.launch { try { listState.scrollToItem(0) } catch (_: Throwable) {} }
+                    toast = "已清空，可以重新写内容；点绿勾保存才会写进文件"
+                }) { Text("清空") }
+            },
+            dismissButton = { TextButton(onClick = { askClear = false }) { Text("取消") } }
+        )
     }
 
     if (askExit) {
