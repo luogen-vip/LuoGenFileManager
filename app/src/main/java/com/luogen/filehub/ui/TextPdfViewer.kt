@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luogen.filehub.data.FileOps
@@ -66,6 +67,13 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     var toast by remember { mutableStateOf<String?>(null) }
     var openInfo by remember { mutableStateOf(false) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    // 点铅笔进编辑后直接把焦点给输入框，键盘自己弹出来，不用再点一下
+    val editFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(editing) {
+        if (editing) {
+            try { editFocus.requestFocus() } catch (_: Throwable) {}
+        }
+    }
 
     LaunchedEffect(path) {
         withContext(Dispatchers.IO) {
@@ -105,7 +113,11 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     }
 
     BackHandler {
-        if (editing && text != original) askExit = true else nav.pop()
+        when {
+            editing && text != original -> askExit = true
+            editing -> { text = original; editing = false }   // 没改就退出编辑，回到预览
+            else -> nav.pop()
+        }
     }
 
     Scaffold(
@@ -126,7 +138,15 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                         )
                     }
                 },
-                navigationIcon = { IconButton(onClick = { if (editing && text != original) askExit = true else nav.pop() }) { Icon(Icons.Filled.ArrowBack, null) } },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        when {
+                            editing && text != original -> askExit = true
+                            editing -> { text = original; editing = false }
+                            else -> nav.pop()
+                        }
+                    }) { Icon(Icons.Filled.ArrowBack, null) }
+                },
                 actions = {
                     IconButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(text)); toast = "全文已复制" }) {
                         Icon(Icons.Filled.ContentCopy, null)
@@ -199,7 +219,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it },
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        modifier = Modifier.fillMaxSize().padding(8.dp).focusRequester(editFocus),
                         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp)
                     )
                 }
@@ -257,18 +277,20 @@ fun TextViewerScreen(nav: NavStack, path: String) {
         AlertDialog(
             onDismissRequest = { askExit = false },
             title = { Text("还没保存") },
-            text = { Text("你修改了内容但没有保存。要保存吗？选择「不保存」会恢复成编辑前的样子。") },
+            text = { Text("你修改了内容但没有保存。要保存吗？两个选择都会回到预览页。") },
             confirmButton = {
                 TextButton(onClick = {
                     try {
                         file.writeText(text)
+                        val back = try { file.readText() } catch (_: Throwable) { "" }
+                        if (back != text) throw IllegalStateException("写入校验不一致")
                         original = text
-                        toast = "已保存并退出"
-                    } catch (_: Throwable) {
-                        toast = "保存失败"
+                        toast = "已保存"
+                    } catch (t: Throwable) {
+                        toast = "保存失败：${t.message ?: t.javaClass.simpleName}"
                     }
+                    editing = false
                     askExit = false
-                    nav.pop()
                 }) { Text("保存") }
             },
             dismissButton = {
@@ -277,7 +299,6 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                         text = original
                         editing = false
                         askExit = false
-                        nav.pop()
                     }) { Text("不保存") }
                     TextButton(onClick = { askExit = false }) { Text("继续编辑") }
                 }
@@ -285,9 +306,11 @@ fun TextViewerScreen(nav: NavStack, path: String) {
         )
     }
 
-    toast?.let {
-        AlertDialog(onDismissRequest = { toast = null }, title = { Text("提示") }, text = { Text(it) },
-            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } })
+    LaunchedEffect(toast) {
+        toast?.let {
+            android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show()
+            toast = null
+        }
     }
 }
 

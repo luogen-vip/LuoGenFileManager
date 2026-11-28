@@ -120,7 +120,11 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                 dirty = false
                 cache.evictAll()
                 toast = "已保存（${file.length().toSizeText()}）"
-                if (thenExit) nav.pop() else { generation++; build() }
+                if (thenExit) nav.pop() else {
+                    editMode = false
+                    generation++
+                    build()
+                }
             } else {
                 toast = "保存失败：${r.exceptionOrNull()?.message ?: "可能没有写入权限"}"
             }
@@ -128,7 +132,11 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     }
 
     BackHandler {
-        if (dirty) askExit = true else nav.pop()
+        when {
+            dirty -> askExit = true
+            editMode -> editMode = false
+            else -> nav.pop()
+        }
     }
 
     Scaffold(
@@ -151,9 +159,13 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (dirty) askExit = true else nav.pop() }) {
-                        Icon(Icons.Filled.ArrowBack, null)
-                    }
+                    IconButton(onClick = {
+                        when {
+                            dirty -> askExit = true
+                            editMode -> editMode = false
+                            else -> nav.pop()
+                        }
+                    }) { Icon(Icons.Filled.ArrowBack, null) }
                 },
                 actions = {
                     if (saving) {
@@ -166,10 +178,7 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                                 Icon(Icons.Filled.Save, null, tint = if (dirty) GoodGreen else TextDim)
                             }
                         }
-                        IconButton(onClick = {
-                            editMode = !editMode
-                            toast = if (editMode) "现在可以直接改了，改完点绿√保存" else "已退出编辑，未保存的修改还在，可以再点铅笔回去"
-                        }) {
+                        IconButton(onClick = { editMode = !editMode }) {
                             Icon(
                                 if (editMode) Icons.Filled.Check else Icons.Filled.Edit, null,
                                 tint = if (editMode) GoodGreen else BrandBlue
@@ -250,14 +259,21 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
         AlertDialog(
             onDismissRequest = { askExit = false },
             title = { Text("还有没保存的修改") },
-            text = { Text("现在退出，刚才改的内容会丢掉。") },
+            text = { Text("你修改了内容但没有保存。选择「不保存」会恢复成原来的样子，两个选择都会回到预览。") },
             confirmButton = {
-                TextButton(onClick = { askExit = false; doSave(true) }) { Text("保存并退出") }
+                TextButton(onClick = { askExit = false; doSave(false) }) { Text("保存") }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { askExit = false; dirty = false; nav.pop() }) { Text("不保存") }
-                    TextButton(onClick = { askExit = false }) { Text("取消") }
+                    TextButton(onClick = {
+                        edits.clear()
+                        dirty = false
+                        editMode = false
+                        askExit = false
+                        generation++
+                        scope.launch { build() }
+                    }) { Text("不保存") }
+                    TextButton(onClick = { askExit = false }) { Text("继续编辑") }
                 }
             }
         )
@@ -287,13 +303,11 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
         )
     }
 
-    toast?.let {
-        AlertDialog(
-            onDismissRequest = { toast = null },
-            title = { Text("提示") },
-            text = { Text(it) },
-            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } }
-        )
+    LaunchedEffect(toast) {
+        toast?.let {
+            android.widget.Toast.makeText(ctx, it, android.widget.Toast.LENGTH_SHORT).show()
+            toast = null
+        }
     }
 }
 
