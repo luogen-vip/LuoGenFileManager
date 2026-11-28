@@ -1,6 +1,10 @@
 package com.luogen.filehub.ui
 
 import android.content.ClipData
+import android.database.ContentObserver as BaseContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -47,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -282,6 +287,16 @@ private suspend fun searchFiles(ctx: android.content.Context, keyword: String, p
     return out
 }
 
+private fun sameList(a: List<Entry>, b: List<Entry>): Boolean {
+    if (a.size != b.size) return false
+    for (i in a.indices) {
+        val x = a[i].file
+        val y = b[i].file
+        if (x.absolutePath != y.absolutePath || x.length() != y.length() || x.lastModified() != y.lastModified()) return false
+    }
+    return true
+}
+
 @Composable
 private fun PickScreen(
     mimeTypes: List<String>,
@@ -315,33 +330,105 @@ private fun PickScreen(
         if (!manualView) grid = tab.label == "图片" || tab.label == "视频"
     }
 
-    LaunchedEffect(dir, keyword, tabIndex, mimeTypes) {
-        loading = true
-        if (keyword.isNotBlank()) delay(220)   // 打字防抖，避免每敲一个字都查一次
-        val globalCat = keyword.isBlank() && tab.label != "全部"
-        if (globalCat) {
-            // 分类页：不按当前文件夹，直接列全机这一类的所有文件
+    // ---------- 现读现显示：缓存 + 版本号 ----------
+    // cacheKey 相同的列表先拿缓存秒显，再在后台静默比对；文件变化监听一到就自动刷新
+    val cache = remember { HashMap<String, List<Entry>>() }
+    val scannedAt = remember { HashMap<String, Int>() }
+    var version by remember { mutableStateOf(0) }
+
+    // 系统文件索引变化（下载/删除/移动/改名）立刻刷新；再加 2 秒轮询兜底
+    DisposableEffect(Unit) {
+        val handler = Handler(Looper.getMainLooper())
+        val obs = object : BaseContentObserver(handler) {
+            override fun onChange(selfChange: Boolean) {
+                version++
+            }
+        }
+        try {
+            ctx.contentResolver.registerContentObserver(MediaStore.Files.getContentUri("external"), true, obs)
+        } catch (_: Throwable) {
+        }
+        var sig = ""
+        val poll = object : Runnable {
+            override fun run() {
+                val s = try {
+                    FileRepo(ctx).recent(15).joinToString("|") { it.path + ":" + it.size + ":" + it.modified }
+                } catch (_: Throwable) {
+                    ""
+                }
+                if (sig.isNotEmpty() && s != sig) version++
+                sig = s
+                handler.postDelayed(this, 2000L)
+            }
+        }
+        handler.postDelayed(poll, 2000L)
+        onDispose {
+            try { ctx.contentResolver.unregisterContentObserver(obs) } catch (_: Throwable) {}
+            handler.removeCallbacks(poll)
+        }
+    }
+    // 从别的 App 回来（在那边删了/移了文件）也刷新一次
+    DisposableEffect(Unit) {
+        val act = ctx as? androidx.activity.ComponentActivity
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) version++
+        }
+        act?.lifecycle?.addObserver(obs)
+        onDispose { act?.lifecycle?.removeObserver(obs) }
+    }
+
+    LaunchedEffect(dir, keyword, tabIndex, mimeTypes, version) {
+        val key = "${dir.absolutePath}|$tabIndex|$keyword"
+        if (keyword.isNotBlank()) {
+            // 搜索结果不做缓存，输入即查（带防抖）
+            if (entries.isEmpty()) loading = true
+            delay(220)
             entries = withContext(Dispatchers.IO) {
-                try { mediaOfCategory(ctx, tab, mimeTypes) } catch (_: Throwable) { emptyList() }
+                try { searchFiles(ctx, keyword, mimeTypes, tab) } catch (_: Throwable) { emptyList() }
             }
             loading = false
-            val have = entries.map { it.file.absolutePath }.toHashSet()
+            return@LaunchedEffect
+        }
+
+        val cached = cache[key]
+        if (cached != null) {
+            // 有缓存：立刻显示，不转圈
+            if (!sameList(cached, entries)) entries = cached
+            loading = false
+            delay(120)
+        } else {
+            loading = true
+        }
+
+        val fresh = withContext(Dispatchers.IO) {
+            try {
+                if (tab.label != "全部") mediaOfCategory(ctx, tab, mimeTypes)
+                else readDir(dir, mimeTypes, tab)
+            } catch (_: Throwable) {
+                emptyList()
+            }
+        }
+        if (fresh.isNotEmpty()) cache[key] = fresh
+        if (!sameList(fresh, entries)) entries = fresh
+        loading = false
+
+        // 分类页：索引之外再补一遍扫描（同一版本只扫一次，切换分类不重复扫）
+        if (tab.label != "全部" && scannedAt[key] != version) {
+            scannedAt[key] = version
+            val have = fresh.map { it.file.absolutePath }.toHashSet()
             val extra = withContext(Dispatchers.IO) {
                 try { scanOfCategory(root, tab, mimeTypes, have) } catch (_: Throwable) { emptyList() }
             }
             if (extra.isNotEmpty()) {
-                entries = (entries + extra).sortedByDescending { it.file.lastModified() }
+                val merged = (fresh + extra).sortedByDescending { it.file.lastModified() }
+                cache[key] = merged
+                if (!sameList(merged, entries)) entries = merged
             }
-        } else {
-            entries = withContext(Dispatchers.IO) {
-                try {
-                    if (keyword.isBlank()) readDir(dir, mimeTypes, tab) else searchFiles(ctx, keyword, mimeTypes, tab)
-                } catch (_: Throwable) {
-                    emptyList()
-                }
-            }
-            loading = false
         }
+
+        // 已经删掉/移走的文件不要留在“已选”里
+        val alive = selected.filter { it.exists() }
+        if (alive.size != selected.size) selected = alive
     }
 
     val stateKey = "${dir.absolutePath}|$tabIndex|$keyword"
