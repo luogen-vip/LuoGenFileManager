@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -234,6 +236,9 @@ private fun PickScreen(
     onConfirm: (List<File>) -> Unit
 ) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    // 每个「目录 + 分类 + 搜索词」各自记住滚动位置：进下一级再返回，停在刚才那一行
+    val listStates = remember { HashMap<String, LazyListState>() }
+    val gridStates = remember { HashMap<String, LazyGridState>() }
     val root = remember { Environment.getExternalStorageDirectory() }
     var dir by remember { mutableStateOf(root) }
     var tabIndex by remember { mutableStateOf(0) }
@@ -266,6 +271,16 @@ private fun PickScreen(
             }
         }
         loading = false
+    }
+
+    val stateKey = "${dir.absolutePath}|$tabIndex|$keyword"
+    val listState = remember(stateKey) {
+        if (listStates.size > 80) listStates.clear()
+        listStates.getOrPut(stateKey) { LazyListState() }
+    }
+    val gridState = remember(stateKey) {
+        if (gridStates.size > 80) gridStates.clear()
+        gridStates.getOrPut(stateKey) { LazyGridState() }
     }
 
     BackHandler {
@@ -386,6 +401,7 @@ private fun PickScreen(
                     }
                     grid -> LazyVerticalGrid(
                         columns = GridCells.Fixed(3),
+                        state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -410,7 +426,7 @@ private fun PickScreen(
                         }
                         item { Spacer(Modifier.height(80.dp)) }
                     }
-                    else -> LazyColumn(Modifier.fillMaxSize()) {
+                    else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
                         items(count = entries.size, key = { entries[it].file.absolutePath }) { i ->
                             val e = entries[i]
                             val isSel = selected.any { it.absolutePath == e.file.absolutePath }
