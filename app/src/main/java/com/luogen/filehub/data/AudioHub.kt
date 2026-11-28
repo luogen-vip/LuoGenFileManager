@@ -156,8 +156,6 @@ object AudioHub {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
-                if (isPlaying) pausedAt = null
-                else if (p.mediaItemCount > 0) pausedAt = playlist.getOrNull(p.currentMediaItemIndex)
                 saveState()
                 pushState()
                 refreshNotification()
@@ -192,6 +190,7 @@ object AudioHub {
                 override fun onSeekTo(pos: Long) { seekTo(pos) }
                 override fun onStop() {
                     // 系统/其他应用抢走媒体控制时只暂停，绝不清空队列，回来还能接着播
+                    pausedAt = currentPath()
                     player?.pause()
                     pushState()
                     refreshNotification()
@@ -212,11 +211,7 @@ object AudioHub {
         val sameList = playlist == list
         if (sameList && p.mediaItemCount == list.size) {
             if (p.currentMediaItemIndex == idx) {
-                // 用户又点了一次这一首：不管在不在播，都从头重新放
-                p.seekTo(idx, 0)
-                p.play()
-                position = 0
-                saveState(); pushState(); startForegroundService(); refreshNotification()
+                restart()
                 return
             }
             // 同一个队列里切歌：直接 seek，不再清空重建，点列表立刻响应
@@ -240,9 +235,26 @@ object AudioHub {
         refreshNotification()
     }
 
+    /** 从头重播当前这首：用户再点一次同一首歌就是想要“重新开始” */
+    fun restart() {
+        val p = player ?: return
+        try {
+            p.pause()
+            p.seekTo(0L)
+            p.play()
+        } catch (_: Throwable) {}
+        position = 0
+        pausedAt = null
+        saveState()
+        pushState()
+        startForegroundService()
+        refreshNotification()
+    }
+
     fun toggle() {
         val p = ensure(appCtx ?: return)
         if (p.isPlaying) {
+            pausedAt = currentPath()
             p.pause()
         } else {
             // 队列被系统清掉/播放器进过 ENDED 时，按当前列表原地重建再播，不能点了没反应
@@ -254,6 +266,7 @@ object AudioHub {
                 p.seekTo(p.currentMediaItemIndex.coerceAtLeast(0), 0)
                 p.prepare()
             }
+            pausedAt = null
             p.play()
             startForegroundService()
         }
@@ -263,6 +276,7 @@ object AudioHub {
     }
 
     fun pauseForVideo() {
+        pausedAt = currentPath()
         player?.pause()
         saveState()
         pushState()
@@ -289,6 +303,7 @@ object AudioHub {
             val target = if (cur + 1 < count) cur + 1 else 0
             p.seekTo(target, 0)
         }
+        pausedAt = null
         p.play()
         saveState()
         pushState()
@@ -314,6 +329,7 @@ object AudioHub {
             val target = if (cur - 1 >= 0) cur - 1 else count - 1
             p.seekTo(target, 0)
         }
+        pausedAt = null
         p.play()
         saveState()
         pushState()

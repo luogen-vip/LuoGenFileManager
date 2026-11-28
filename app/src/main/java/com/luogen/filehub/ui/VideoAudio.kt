@@ -466,6 +466,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
                 queueOpen = false
                 hub.playQueueAt(i, ctx)
             },
+            onRestart = { queueOpen = false; hub.restart() },
             onRemove = { i ->
                 hub.removeAt(i)
                 if (hub.playlist.isEmpty()) {
@@ -494,6 +495,7 @@ private fun PlayQueueDialog(
     playing: Boolean,
     pausedPath: String?,
     onPlay: (Int) -> Unit,
+    onRestart: () -> Unit,
     onRemove: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -518,7 +520,11 @@ private fun PlayQueueDialog(
                     items(count = queue.size, key = { i -> "$i|${queue[i]}" }) { i ->
                         val name = File(queue[i]).name
                         Row(
-                            Modifier.fillMaxWidth().clickable { if (picked < 0) picked = i }.padding(vertical = 7.dp),
+                            Modifier.fillMaxWidth().clickable {
+                                if (picked >= 0) return@clickable
+                                // 点的是正在播的这一首：直接从头重播，不走“切换”流程
+                                if (i == current) onRestart() else picked = i
+                            }.padding(vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
