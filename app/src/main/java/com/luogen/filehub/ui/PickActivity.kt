@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -281,6 +282,34 @@ private fun PickScreen(
     val gridState = remember(stateKey) {
         if (gridStates.size > 80) gridStates.clear()
         gridStates.getOrPut(stateKey) { LazyGridState() }
+    }
+
+    // 位置单独记一份（不走 Compose 自带恢复，避免列表重建时被拉回顶部）
+    val listPos = remember { HashMap<String, IntArray>() }
+    val gridPos = remember { HashMap<String, IntArray>() }
+    var restoredKey by remember { mutableStateOf("") }
+
+    LaunchedEffect(stateKey, listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (i, o) -> listPos[stateKey] = intArrayOf(i, o) }
+    }
+    LaunchedEffect(stateKey, gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (i, o) -> gridPos[stateKey] = intArrayOf(i, o) }
+    }
+    // 列表数据回来后，把上次离开时的位置还原（每次进入某个 key 只还原一次）
+    LaunchedEffect(loading, stateKey, entries.size) {
+        if (!loading && entries.isNotEmpty() && restoredKey != stateKey) {
+            val p = if (grid) gridPos[stateKey] else listPos[stateKey]
+            if (p != null) {
+                val idx = p[0].coerceIn(0, entries.lastIndex)
+                try {
+                    if (grid) gridState.scrollToItem(idx, p[1]) else listState.scrollToItem(idx, p[1])
+                } catch (_: Throwable) {
+                }
+            }
+            restoredKey = stateKey
+        }
     }
 
     BackHandler {
