@@ -56,6 +56,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     var editable by remember(path) { mutableStateOf(true) }
     var binary by remember(path) { mutableStateOf(false) }
     var truncated by remember(path) { mutableStateOf(false) }
+    var bigFile by remember(path) { mutableStateOf(false) }
     var askExit by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
     var openInfo by remember { mutableStateOf(false) }
@@ -64,8 +65,9 @@ fun TextViewerScreen(nav: NavStack, path: String) {
     LaunchedEffect(path) {
         withContext(Dispatchers.IO) {
             val ok = try { TypeDetect.looksText(file) || file.length() == 0L } catch (_: Throwable) { false }
-            // 二进制/非 UTF-8 也照样显示出来（可能乱码），而且开放编辑，保存即用纯文本覆盖
-            val limit = 4L * 1024 * 1024
+            // 二进制/非 UTF-8 也照样显示出来（可能乱码）
+            // 大文本只读：几百万字的字符串塞进可编辑控件会把主线程卡死（就是“无响应”那种）
+            val limit = 2L * 1024 * 1024
             val cut = file.length() > limit
             val content = try {
                 if (cut) {
@@ -83,10 +85,13 @@ fun TextViewerScreen(nav: NavStack, path: String) {
             } catch (_: Throwable) {
                 try { file.readBytes().toString(Charsets.ISO_8859_1) } catch (_: Throwable) { "" }
             }
+            // 超过 128 KB 就不给编辑了：几十万字的输入框一样会卡主线程，只读预览更稳
+            val big = file.length() > 128L * 1024
             withContext(Dispatchers.Main) {
-                editable = true
+                editable = !big && !cut
                 binary = !ok
                 truncated = cut
+                bigFile = big
                 text = content
                 original = content
                 loading = false
@@ -106,7 +111,12 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     Column {
                         Text(file.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Text(
-                            "${file.length().toSizeText()} · " + if (editing) "编辑中（未保存）" else if (binary) "乱码/二进制 · 可编辑" else "可编辑文本",
+                            "${file.length().toSizeText()} · " + when {
+                                editing -> "编辑中（未保存）"
+                                bigFile || truncated -> "大文件 · 只读预览"
+                                binary -> "乱码/二进制 · 可编辑"
+                                else -> "可编辑文本"
+                            },
                             fontSize = 11.sp, color = TextDim
                         )
                     }
@@ -163,25 +173,20 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                 !editable -> Column(Modifier.fillMaxSize()) {
                     Surface(color = WarnAmber.copy(alpha = 0.12f)) {
                         Text(
-                            "这个文件可能是二进制或特殊编码，下面是按文本方式直接显示的内容，出现乱码是正常的；不能在这里编辑。",
+                            if (bigFile || truncated)
+                                "文件较大（${file.length().toSizeText()}），已切换为只读预览，只显示前 2 MB。大文件逐段渲染，不会卡住；需要完整编辑请用电脑端或其他编辑器。"
+                            else
+                                "这个文件可能是二进制或特殊编码，下面是按文本方式直接显示的内容，出现乱码是正常的；不能在这里编辑。",
                             color = WarnAmber, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(12.dp)
                         )
                     }
-                    SelectionContainer {
-                        Text(
-                            text.ifEmpty { "（读不出可显示的内容）" },
-                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
+                    BigTextBody(text.ifEmpty { "（读不出可显示的内容）" }, Modifier.fillMaxSize())
                 }
                 editing -> Column(Modifier.fillMaxSize()) {
-                    if (binary || truncated) {
+                    if (binary) {
                         Surface(color = WarnAmber.copy(alpha = 0.12f)) {
                             Text(
-                                (if (truncated) "文件较大，只显示/编辑前 4 MB；" else "") +
-                                    "这是按文本显示的乱码/二进制内容，保存后会以纯文本覆盖原文件。",
+                                "这是按文本显示的乱码/二进制内容，保存后会以纯文本覆盖原文件。",
                                 color = WarnAmber, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(10.dp)
                             )
                         }
@@ -207,20 +212,13 @@ fun TextViewerScreen(nav: NavStack, path: String) {
                     if (binary || truncated) {
                         Surface(color = WarnAmber.copy(alpha = 0.12f)) {
                             Text(
-                                (if (truncated) "文件较大，只显示前 4 MB；" else "") +
+                                (if (truncated) "文件较大，只显示前 2 MB；" else "") +
                                     "乱码是二进制内容按文本显示的结果，点右上角编辑可以直接改写并保存覆盖。",
                                 color = WarnAmber, fontSize = 11.sp, modifier = Modifier.fillMaxWidth().padding(10.dp)
                             )
                         }
                     }
-                    SelectionContainer {
-                    Text(
-                        text,
-                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
+                    BigTextBody(text, Modifier.fillMaxSize())
                 }
             }
         }
@@ -298,6 +296,53 @@ private fun DocAction(label: String, icon: androidx.compose.ui.graphics.vector.I
         Spacer(Modifier.height(2.dp))
         Text(label, fontSize = 10.sp, color = TextDim)
     }
+}
+
+/** 大文本分块 + 懒加载：几百万字也不会一次性排版，避免主线程卡死 */
+@Composable
+private fun BigTextBody(text: String, modifier: Modifier = Modifier) {
+    if (text.length <= 60_000) {
+        SelectionContainer {
+            Text(
+                text,
+                modifier = modifier.verticalScroll(rememberScrollState()).padding(14.dp),
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        return
+    }
+    val blocks = remember(text) { splitBlocks(text, 6000) }
+    LazyColumn(modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+        items(blocks.size) { i ->
+            Text(
+                blocks[i],
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                color = TextMain
+            )
+        }
+    }
+}
+
+/** 按行累积到约 [max] 字符，尽量不从行中间断开 */
+private fun splitBlocks(text: String, max: Int): List<String> {
+    val out = ArrayList<String>()
+    val sb = StringBuilder()
+    var start = 0
+    while (start < text.length) {
+        val end = minOf(text.length, start + 2048)
+        var idx = text.lastIndexOf('\n', end - 1)
+        if (idx <= start) idx = end - 1
+        sb.append(text, start, idx + 1)
+        start = idx + 1
+        if (sb.length >= max) {
+            out.add(sb.toString())
+            sb.setLength(0)
+        }
+    }
+    if (sb.isNotEmpty()) out.add(sb.toString())
+    return out
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -391,7 +436,8 @@ fun PdfViewerScreen(nav: NavStack, path: String) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PdfPages(renderer: PdfRenderer, pageCount: Int, lock: Any) {
-    val widthPx = with(LocalDensity.current) { 1000.dp.roundToPx() }
+    // 限制单页渲染宽度：一页 3000px 的 ARGB 位图就要 50 MB，翻两页就容易被系统杀掉
+    val widthPx = with(LocalDensity.current) { 1000.dp.roundToPx() }.coerceAtMost(1600)
     // 双指缩放 + 放大后拖动；缩小时仍然是正常上下翻页
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }

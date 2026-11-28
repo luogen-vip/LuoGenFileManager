@@ -147,34 +147,15 @@ class MainActivity : ComponentActivity() {
 
     /**
      * 真正打开外部传来的文件。
-     * 小文件（图片等）在首帧之前同步复制完并直接把查看器压栈 —— 不依赖 Compose 生命周期、不依赖协程时序，
-     * 一进来看到的就是文件本身，而不是首页。
+     * 复制一律在后台线程做：主线程碰一下就卡，几 MB 的文件都足以让人看到“无响应”。
      */
     private fun startExternalOpen(req: OpenReq) {
         handledIntentUri = req.uri.toString()
         // 立刻给一个“收到了”的反馈：能看见这句，就说明系统确实把文件交给我们了
         toast("正在打开：${req.name}")
-        val eo = com.luogen.filehub.data.ExternalOpen
-        val size = try { eo.sizeOf(this, req.uri) } catch (_: Throwable) { null }
-        val small = (size != null && size in 1..(12L * 1024 * 1024)) ||
-            (size == null && req.mime.startsWith("image/"))
-        if (small) {
-            AppState.externalBusy = req.name
-            val item = try {
-                eo.materializeNow(this, req.uri, req.name, req.mime)
-            } finally {
-                AppState.externalBusy = null
-            }
-            if (item != null) {
-                openSafely(item)
-            } else {
-                toast("读取不到文件内容（可能另一个应用没有授予读取权限）")
-            }
-            return
-        }
-        // 大文件或应用已在前台：后台复制，期间显示「正在打开…」
         AppState.externalBusy = req.name
         extScope.launch {
+            val eo = com.luogen.filehub.data.ExternalOpen
             val item = try {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     eo.materialize(this@MainActivity, req.uri.toString(), req.name, req.mime)
