@@ -10,6 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +64,11 @@ import com.luogen.filehub.data.TypeDetect
 import com.luogen.filehub.model.Cat
 import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.toSizeText
+import com.luogen.filehub.data.FileRepo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -97,6 +103,8 @@ class PickActivity : androidx.activity.ComponentActivity() {
         intent?.type?.let { if (it.isNotBlank()) out.add(it) }
         intent?.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)?.forEach { if (it.isNotBlank()) out.add(it) }
         if (out.isEmpty()) out.add("*/*")
+        // 调用方给了 "*/*" 又给了具体类型时，以具体类型为准
+        if (out.size > 1 && out.contains("*/*")) out.removeAll { it == "*/*" }
         return out
     }
 
@@ -195,25 +203,27 @@ private fun readDir(dir: File, patterns: List<String>, tab: PickTab): List<Entry
         .sortedWith(compareBy({ !it.file.isDirectory }, { it.file.name.lowercase() }))
 }
 
-private fun searchDir(root: File, keyword: String, patterns: List<String>, tab: PickTab): List<Entry> {
-    val key = keyword.lowercase()
-    val out = ArrayList<Entry>()
-    fun walk(dir: File, depth: Int) {
-        if (depth > 5 || out.size >= 300) return
-        val list = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Throwable) { emptyList() }
-        for (f in list) {
-            if (out.size >= 300) return
-            if (f.name.startsWith(".")) continue
-            if (f.isDirectory) {
-                walk(f, depth + 1)
-            } else {
-                val mime = TypeDetect.mimeOf(f.name)
-                if (f.name.lowercase().contains(key) && mimeAllowed(mime, patterns) && tab.test(mime)) out.add(entryOf(f))
-            }
-        }
+/**
+ * 搜索走系统的 MediaStore 索引（和 App 内搜索同一套），不再自己递归扫全盘，
+ * 几万个文件也是瞬间出结果；没有结果时再兜底扫常用目录。
+ */
+private suspend fun searchFiles(ctx: android.content.Context, keyword: String, patterns: List<String>, tab: PickTab): List<Entry> {
+    val repo = FileRepo(ctx)
+    var list = try { repo.searchAll(keyword, 300) } catch (_: Throwable) { emptyList() }
+    if (list.isEmpty()) {
+        list = try { repo.scanFallback(keyword, 150) } catch (_: Throwable) { emptyList() }
     }
-    walk(root, 0)
-    return out.sortedBy { it.file.name.lowercase() }
+    val out = ArrayList<Entry>()
+    for (it in list) {
+        coroutineContext.ensureActive()
+        val f = File(it.path)
+        if (!f.exists() || f.isDirectory || f.name.startsWith(".")) continue
+        val mime = TypeDetect.mimeOf(f.name)
+        if (!mimeAllowed(mime, patterns) || !tab.test(mime)) continue
+        out.add(entryOf(f))
+        if (out.size >= 300) break
+    }
+    return out
 }
 
 @Composable
@@ -223,6 +233,7 @@ private fun PickScreen(
     onCancel: () -> Unit,
     onConfirm: (List<File>) -> Unit
 ) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val root = remember { Environment.getExternalStorageDirectory() }
     var dir by remember { mutableStateOf(root) }
     var tabIndex by remember { mutableStateOf(0) }
@@ -232,18 +243,27 @@ private fun PickScreen(
     var loading by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<List<File>>(emptyList()) }
 
-    val tabs = remember(mimeTypes) { TABS.filter { t -> t.label == "全部" || mimeTypes.any { m -> t.test(m) } } }
+    val tabs = remember(mimeTypes) {
+        val open = mimeTypes.any { it == "*/*" }
+        if (open) TABS else TABS.filter { t -> t.label == "全部" || mimeTypes.any { m -> t.test(m) } }
+    }
     val tab = tabs.getOrNull(tabIndex) ?: tabs.first()
 
-    // 只允许图片/视频时默认网格，更好挑
-    LaunchedEffect(tabs.size) {
-        grid = tabs.size in 2..3 && tabs.any { it.label == "图片" || it.label == "视频" }
+    // 切到图片/视频分类自动用网格（用户手动切过视图就不再干预）
+    var manualView by remember { mutableStateOf(false) }
+    LaunchedEffect(tabIndex) {
+        if (!manualView) grid = tab.label == "图片" || tab.label == "视频"
     }
 
     LaunchedEffect(dir, keyword, tabIndex, mimeTypes) {
         loading = true
+        if (keyword.isNotBlank()) delay(220)   // 打字防抖，避免每敲一个字都查一次
         entries = withContext(Dispatchers.IO) {
-            if (keyword.isBlank()) readDir(dir, mimeTypes, tab) else searchDir(dir, keyword, mimeTypes, tab)
+            try {
+                if (keyword.isBlank()) readDir(dir, mimeTypes, tab) else searchFiles(ctx, keyword, mimeTypes, tab)
+            } catch (_: Throwable) {
+                emptyList()
+            }
         }
         loading = false
     }
@@ -288,7 +308,10 @@ private fun PickScreen(
                 Modifier.fillMaxWidth().padding(start = 12.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     tabs.forEachIndexed { i, t ->
                         val on = i == tabIndex
                         Text(
@@ -302,7 +325,7 @@ private fun PickScreen(
                         )
                     }
                 }
-                IconButton(onClick = { grid = !grid }, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = { grid = !grid; manualView = true }, modifier = Modifier.size(34.dp)) {
                     Icon(if (grid) Icons.Filled.ViewList else Icons.Filled.GridView, "切换视图", tint = TextDim, modifier = Modifier.size(20.dp))
                 }
             }
@@ -341,7 +364,7 @@ private fun PickScreen(
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = TextMain),
                     modifier = Modifier.weight(1f).padding(vertical = 9.dp),
                     decorationBox = { inner ->
-                        if (keyword.isEmpty()) Text("在当前文件夹搜索…", fontSize = 13.sp, color = TextDim)
+                        if (keyword.isEmpty()) Text("搜索手机里的文件…", fontSize = 13.sp, color = TextDim)
                         inner()
                     }
                 )
