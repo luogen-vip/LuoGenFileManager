@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
@@ -83,6 +85,8 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     var askExit by remember { mutableStateOf(false) }
     var openInfo by remember { mutableStateOf(false) }
     var binary by remember(path) { mutableStateOf(false) }
+    // 和普通文本页一致：先看，点铅笔才进入编辑
+    var editMode by remember(path) { mutableStateOf(false) }
     // 保存后文件结构变了：让所有分段按新内容重新读一遍，避免残留旧文字
     var generation by remember(path) { mutableStateOf(0) }
 
@@ -157,8 +161,19 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                             CircularProgressIndicator(Modifier.size(18.dp), color = BrandBlue, strokeWidth = 2.dp)
                         }
                     } else {
-                        IconButton(onClick = { doSave(false) }, enabled = dirty) {
-                            Icon(Icons.Filled.Save, null, tint = if (dirty) GoodGreen else TextDim)
+                        if (editMode) {
+                            IconButton(onClick = { doSave(false) }, enabled = dirty) {
+                                Icon(Icons.Filled.Save, null, tint = if (dirty) GoodGreen else TextDim)
+                            }
+                        }
+                        IconButton(onClick = {
+                            editMode = !editMode
+                            toast = if (editMode) "现在可以直接改了，改完点绿√保存" else "已退出编辑，未保存的修改还在，可以再点铅笔回去"
+                        }) {
+                            Icon(
+                                if (editMode) Icons.Filled.Check else Icons.Filled.Edit, null,
+                                tint = if (editMode) GoodGreen else BrandBlue
+                            )
                         }
                     }
                 },
@@ -204,12 +219,23 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                                 }
                             }
                         }
+                        if (editMode) {
+                            item {
+                                Surface(color = BrandBlue.copy(alpha = 0.10f)) {
+                                    Text(
+                                        "编辑中：可以直接点任意一段修改，改完点右上角绿色勾保存（有未保存内容时它也变绿）。",
+                                        color = BrandBlue, fontSize = 11.sp,
+                                        modifier = Modifier.fillMaxWidth().padding(10.dp)
+                                    )
+                                }
+                            }
+                        }
                         items(count = count, key = { it }) { idx ->
                             ChunkBlock(
                                 index = idx, count = count,
                                 start = b[idx], end = b[idx + 1],
                                 file = file, edits = edits, cache = cache,
-                                generation = generation,
+                                generation = generation, editable = editMode,
                                 onChanged = { dirty = true }
                             )
                         }
@@ -281,6 +307,7 @@ private fun ChunkBlock(
     edits: MutableMap<Int, String>,
     cache: android.util.LruCache<Int, String>,
     generation: Int,
+    editable: Boolean,
     onChanged: () -> Unit
 ) {
     var value by remember(index, generation) { mutableStateOf<TextFieldValue?>(null) }
@@ -307,6 +334,15 @@ private fun ChunkBlock(
         if (v == null) {
             Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
                 Text("载入中…", fontSize = 11.sp, color = TextDim)
+            }
+        } else if (!editable) {
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Text(
+                    v.text,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
+                    color = TextMain, fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace, lineHeight = 19.sp
+                )
             }
         } else {
             BasicTextField(

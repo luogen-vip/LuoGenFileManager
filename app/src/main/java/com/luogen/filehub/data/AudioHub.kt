@@ -98,12 +98,7 @@ object AudioHub {
         index = sp.getInt("index", 0).coerceIn(0, q.lastIndex)
         repeatMode = sp.getInt("repeat", 0).coerceIn(0, 2)
         shuffleOn = repeatMode == 2
-        p.shuffleModeEnabled = shuffleOn
-        p.repeatMode = when (repeatMode) {
-            1 -> Player.REPEAT_MODE_ONE
-            2 -> Player.REPEAT_MODE_ALL
-            else -> Player.REPEAT_MODE_OFF
-        }
+        applyRepeat(p)
         q.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
         p.seekTo(index, sp.getLong("pos", 0L).coerceAtLeast(0L))
         p.prepare()
@@ -178,7 +173,7 @@ object AudioHub {
                 refreshNotification()
             }
         })
-        p.repeatMode = Player.REPEAT_MODE_OFF
+        applyRepeat(p)
         player = p
         if (session == null) {
             val s = MediaSession(ctx.applicationContext, "LuoGenFileManager")
@@ -226,7 +221,7 @@ object AudioHub {
         index = idx
         p.clearMediaItems()
         list.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
-        p.shuffleModeEnabled = shuffleOn
+        applyRepeat(p)
         p.seekTo(idx, 0)
         p.prepare()
         p.playWhenReady = true
@@ -336,6 +331,7 @@ object AudioHub {
         }
         add.forEach { path -> p.addMediaItem(MediaItem.fromUri(Uri.fromFile(File(path)))) }
         playlist = playlist + add
+        applyRepeat()
         p.shuffleModeEnabled = shuffleOn
         saveState()
         pushState()
@@ -348,6 +344,7 @@ object AudioHub {
         if (pos !in playlist.indices) return
         val p = player
         playlist = playlist.toMutableList().also { it.removeAt(pos) }
+        applyRepeat()
         if (playlist.isEmpty()) {
             p?.clearMediaItems()
             p?.stop()
@@ -386,20 +383,29 @@ object AudioHub {
     }
 
     /**
+     * 统一决定 ExoPlayer 的循环方式。
+     * 关键点：顺序播放（0）且队列里只有一首时，一首播完不能停住，
+     * 应该接着播这一首，所以这种情况下按“单曲循环”处理。
+     */
+    private fun applyRepeat(p: ExoPlayer? = player) {
+        val pl = p ?: return
+        pl.shuffleModeEnabled = repeatMode == 2
+        pl.repeatMode = when {
+            repeatMode == 1 -> Player.REPEAT_MODE_ONE
+            repeatMode == 2 -> Player.REPEAT_MODE_ALL
+            playlist.size <= 1 -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+    }
+
+    /**
      * 顺序播放 -> 单曲循环 -> 随机播放 -> 顺序播放。
      * 不再单独放一个“列表循环”和“随机”按钮，避免用户分不清两者区别。
      */
     fun cycleRepeat(): Int {
         repeatMode = (repeatMode + 1) % 3
         shuffleOn = repeatMode == 2
-        player?.let { p ->
-            p.shuffleModeEnabled = shuffleOn
-            p.repeatMode = when (repeatMode) {
-                1 -> Player.REPEAT_MODE_ONE
-                2 -> Player.REPEAT_MODE_ALL
-                else -> Player.REPEAT_MODE_OFF
-            }
-        }
+        applyRepeat()
         saveState()
         pushState()
         refreshNotification()
