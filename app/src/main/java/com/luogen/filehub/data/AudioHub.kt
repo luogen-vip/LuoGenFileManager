@@ -205,9 +205,11 @@ object AudioHub {
         val sameList = playlist == list
         if (sameList && p.mediaItemCount == list.size) {
             if (p.currentMediaItemIndex == idx) {
-                if (p.isPlaying) return
+                // 用户又点了一次这一首：不管在不在播，都从头重新放
+                p.seekTo(idx, 0)
                 p.play()
-                saveState(); pushState(); refreshNotification()
+                position = 0
+                saveState(); pushState(); startForegroundService(); refreshNotification()
                 return
             }
             // 同一个队列里切歌：直接 seek，不再清空重建，点列表立刻响应
@@ -356,8 +358,24 @@ object AudioHub {
                 try { c.stopService(Intent(c, AudioFgService::class.java)) } catch (_: Throwable) {}
             }
         } else {
-            if (p != null && pos < p.mediaItemCount) p.removeMediaItem(pos)
-            index = index.coerceIn(0, playlist.lastIndex)
+            val cur = p?.currentMediaItemIndex ?: -1
+            if (p != null) {
+                if (pos == cur && !playing) {
+                    // 删的就是那首“已暂停”的歌：把播放器彻底停掉，
+                    // 否则它会顺势把下一首当成当前曲目，列表里就冒出一首根本没播过的“已暂停”
+                    try { p.stop() } catch (_: Throwable) {}
+                    try { p.clearMediaItems() } catch (_: Throwable) {}
+                    index = pos.coerceIn(0, playlist.lastIndex)
+                    position = 0
+                    duration = 0
+                } else if (pos < p.mediaItemCount) {
+                    p.removeMediaItem(pos)
+                    index = if (pos < cur) (cur - 1).coerceAtLeast(0) else cur
+                    index = index.coerceIn(0, playlist.lastIndex)
+                }
+            } else {
+                index = index.coerceIn(0, playlist.lastIndex)
+            }
         }
         saveState()
         pushState()

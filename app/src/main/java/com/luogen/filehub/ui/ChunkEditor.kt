@@ -1,7 +1,6 @@
 package com.luogen.filehub.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,8 +13,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -37,16 +36,17 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,81 +57,150 @@ import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.BufferedReader
+import java.io.BufferedWriter
 import java.io.File
 import java.io.FileInputStream
-import java.io.RandomAccessFile
+import java.io.InputStreamReader
+import java.io.OutputStreamWriter
 import java.util.Random
 
 /**
- * 超大文本的“分块编辑器”。
+ * 大文本编辑器：整篇读进内存，按字符切成小块渲染。
  *
- * 以前是把几百万字一次性塞进一个输入框，Compose 排版直接把主线程卡死（就是那个“无响应”）。
- * 现在把文件按行切成若干段（每段约 64 KB），一段一个输入框、只渲染屏幕上看得见的那几段，
- * 随便点哪段都能直接改；保存时逐段写回磁盘，没改过的段原样按字节复制，不会破坏原文件。
- * 所以文件再大也能编辑，不再是“只能看不能改”。
+ * 这样做的原因：
+ * 1. 只读一次盘、只存一份字符数据，往后翻不用再读盘 —— 不会再出现“每段都载入中”；
+ * 2. 每块约 8 千字，只渲染屏幕上看得到的几块，几十 MB 也不会把主线程卡死；
+ * 3. 点铅笔立刻进编辑（数据早在内存里），保存时按块顺序直接写盘，不拼大字符串。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChunkEditorScreen(nav: NavStack, path: String) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ctx = LocalContext.current
     val file = remember(path) { File(path) }
     val scope = rememberCoroutineScope()
 
-    var bounds by remember(path) { mutableStateOf<LongArray?>(null) }
+    val blocks = remember(path) { ArrayList<String>() }
+    val origin = remember(path) { HashMap<Int, String>() }
+    var loaded by remember(path) { mutableStateOf(false) }
     var loadError by remember(path) { mutableStateOf<String?>(null) }
-    var saving by remember(path) { mutableStateOf(false) }
+    var binary by remember(path) { mutableStateOf(false) }
+    var editMode by remember(path) { mutableStateOf(false) }
     var dirty by remember(path) { mutableStateOf(false) }
+    var saving by remember(path) { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
     var askExit by remember { mutableStateOf(false) }
     var openInfo by remember { mutableStateOf(false) }
-    var binary by remember(path) { mutableStateOf(false) }
-    // 和普通文本页一致：先看，点铅笔才进入编辑
-    var editMode by remember(path) { mutableStateOf(false) }
-    // 保存后文件结构变了：让所有分段按新内容重新读一遍，避免残留旧文字
-    var generation by remember(path) { mutableStateOf(0) }
+    var truncated by remember(path) { mutableStateOf(false) }
 
-    val edits = remember(path) { mutableStateMapOf<Int, String>() }
-    // 只记住最近读过的几段文本，滚回去不用再读盘；64 KB × 24 ≈ 1.5 MB，不占内存
-    val cache = remember(path) { object : android.util.LruCache<Int, String>(24) {} }
+    val maxBytes = 32L * 1024 * 1024
 
-    suspend fun build() = withContext(Dispatchers.IO) {
-        try {
-            binary = !sampleLooksText(file)
-            val chunk = if (file.length() > 64L * 1024 * 1024) file.length() / 8000 else 64L * 1024
-            bounds = buildBounds(file, chunk)
-            if (bounds == null || bounds!!.size < 2) loadError = "读不出文件内容"
-        } catch (t: Throwable) {
-            loadError = t.message ?: t.javaClass.simpleName
+    LaunchedEffect(path) {
+        withContext(Dispatchers.IO) {
+            try {
+                binary = !sampleLooksText(file)
+                if (file.length() > maxBytes) {
+                    truncated = true
+                    // 超过上限：只读前 32 MB，避免把内存吃光
+                    var remain = maxBytes
+                    BufferedReader(InputStreamReader(FileInputStream(file), Charsets.UTF_8), 64 * 1024).use { r ->
+                        val sb = StringBuilder(8192)
+                        val buf = CharArray(16384)
+                        while (remain > 0) {
+                            val n = r.read(buf)
+                            if (n <= 0) break
+                            var start = 0
+                            var i = 0
+                            while (i < n) {
+                                if (buf[i] == '\n') {
+                                    sb.append(buf, start, i - start + 1)
+                                    start = i + 1
+                                    if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                                }
+                                i++
+                            }
+                            if (start < n) sb.append(buf, start, n - start)
+                            if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                            remain -= n
+                        }
+                        if (sb.isNotEmpty()) blocks.add(sb.toString())
+                    }
+                    if (blocks.isEmpty()) blocks.add("")
+                    loaded = true
+                    return@withContext
+                }
+                BufferedReader(InputStreamReader(FileInputStream(file), Charsets.UTF_8), 64 * 1024).use { r ->
+                    val sb = StringBuilder(8192)
+                    val buf = CharArray(16384)
+                    while (true) {
+                        val n = r.read(buf)
+                        if (n <= 0) break
+                        var start = 0
+                        var i = 0
+                        while (i < n) {
+                            if (buf[i] == '\n') {
+                                sb.append(buf, start, i - start + 1)
+                                start = i + 1
+                                if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                            }
+                            i++
+                        }
+                        if (start < n) sb.append(buf, start, n - start)
+                        if (sb.length >= 8000) { blocks.add(sb.toString()); sb.setLength(0) }
+                    }
+                    if (sb.isNotEmpty()) blocks.add(sb.toString())
+                }
+                if (blocks.isEmpty()) blocks.add("")
+                loaded = true
+            } catch (t: Throwable) {
+                loadError = t.message ?: t.javaClass.simpleName
+            }
         }
     }
 
-    LaunchedEffect(path) { build() }
+    fun discard() {
+        origin.forEach { (i, t) -> if (i in blocks.indices) blocks[i] = t }
+        origin.clear()
+        dirty = false
+        editMode = false
+    }
 
-    fun doSave(thenExit: Boolean) {
-        val b = bounds ?: return
+    fun doSave() {
         if (saving) return
         saving = true
-        val snapshot = HashMap(edits)
         scope.launch {
-            val r = saveChunked(file, b, snapshot)
+            val r = withContext(Dispatchers.IO) {
+                var tmp: File? = null
+                try {
+                    val dir = file.absoluteFile.parentFile ?: throw IllegalStateException("找不到上级目录")
+                    tmp = File(dir, "." + file.name + ".lgsave" + Random().nextInt(9999))
+                    BufferedWriter(OutputStreamWriter(tmp.outputStream(), Charsets.UTF_8), 256 * 1024).use { w ->
+                        for (i in blocks.indices) w.write(blocks[i])
+                    }
+                    val t = tmp
+                    if (!t.renameTo(file)) {
+                        t.copyTo(file, overwrite = true)
+                        t.delete()
+                    }
+                    Result.success(Unit)
+                } catch (th: Throwable) {
+                    try { tmp?.delete() } catch (_: Throwable) {}
+                    Result.failure(th)
+                }
+            }
             saving = false
             if (r.isSuccess) {
-                edits.clear()
+                origin.clear()
                 dirty = false
-                cache.evictAll()
+                editMode = false
                 toast = "已保存（${file.length().toSizeText()}）"
-                if (thenExit) nav.pop() else {
-                    editMode = false
-                    generation++
-                    build()
-                }
             } else {
                 toast = "保存失败：${r.exceptionOrNull()?.message ?: "可能没有写入权限"}"
             }
         }
     }
 
-    BackHandler {
+    fun back() {
         when {
             dirty -> askExit = true
             editMode -> editMode = false
@@ -139,42 +208,37 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
         }
     }
 
+    BackHandler { back() }
+
     Scaffold(
         containerColor = BgDeep,
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(file.name, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
+                        Text(file.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         Text(
-                            buildString {
-                                append(file.length().toSizeText())
-                                append(" · ")
-                                append(if (binary) "按文本显示（可能乱码）· 可编辑" else "可编辑")
-                                val n = bounds?.let { it.size - 1 } ?: 0
-                                if (n > 1) append(" · 分 $n 段")
+                            file.length().toSizeText() + " · " + when {
+                                editMode -> "编辑中"
+                                binary -> "可能乱码 · 可编辑"
+                                truncated -> "只读预览（超过 32 MB）"
+                                else -> "可编辑"
                             },
                             fontSize = 11.sp, color = TextDim
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        when {
-                            dirty -> askExit = true
-                            editMode -> editMode = false
-                            else -> nav.pop()
-                        }
-                    }) { Icon(Icons.Filled.ArrowBack, null) }
+                    IconButton(onClick = { back() }) { Icon(Icons.Filled.ArrowBack, null) }
                 },
                 actions = {
                     if (saving) {
                         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(Modifier.size(18.dp), color = BrandBlue, strokeWidth = 2.dp)
                         }
-                    } else {
+                    } else if (!truncated) {
                         if (editMode) {
-                            IconButton(onClick = { doSave(false) }, enabled = dirty) {
+                            IconButton(onClick = { doSave() }, enabled = dirty) {
                                 Icon(Icons.Filled.Save, null, tint = if (dirty) GoodGreen else TextDim)
                             }
                         }
@@ -206,50 +270,38 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
-            val b = bounds
             when {
                 loadError != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("打不开这个文件：$loadError", color = DangerRed, fontSize = 13.sp)
                 }
-                b == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = BrandBlue)
                 }
-                else -> {
-                    val count = b.size - 1
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        if (binary) {
-                            item {
-                                Surface(color = WarnAmber.copy(alpha = 0.12f)) {
-                                    Text(
-                                        "这个文件可能不是纯文本，下面是按文本显示的内容，出现乱码是正常的；改完保存会以纯文本覆盖原文件。",
-                                        color = WarnAmber, fontSize = 11.sp,
-                                        modifier = Modifier.fillMaxWidth().padding(10.dp)
-                                    )
-                                }
+                else -> LazyColumn(Modifier.fillMaxSize()) {
+                    if (truncated) {
+                        item {
+                            Surface(color = WarnAmber.copy(alpha = 0.12f)) {
+                                Text(
+                                    "文件超过 32 MB，这里先只显示前 32 MB；要完整编辑建议用电脑打开。",
+                                    color = WarnAmber, fontSize = 11.sp,
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp)
+                                )
                             }
                         }
-                        if (editMode) {
-                            item {
-                                Surface(color = BrandBlue.copy(alpha = 0.10f)) {
-                                    Text(
-                                        "编辑中：可以直接点任意一段修改，改完点右上角绿色勾保存（有未保存内容时它也变绿）。",
-                                        color = BrandBlue, fontSize = 11.sp,
-                                        modifier = Modifier.fillMaxWidth().padding(10.dp)
-                                    )
-                                }
-                            }
-                        }
-                        items(count = count, key = { it }) { idx ->
-                            ChunkBlock(
-                                index = idx, count = count,
-                                start = b[idx], end = b[idx + 1],
-                                file = file, edits = edits, cache = cache,
-                                generation = generation, editable = editMode,
-                                onChanged = { dirty = true }
-                            )
-                        }
-                        item { Spacer(Modifier.height(60.dp)) }
                     }
+                    items(count = blocks.size, key = { it }) { idx ->
+                        TextBlock(
+                            index = idx,
+                            text = blocks[idx],
+                            editable = editMode && !truncated,
+                            onEdited = { newText ->
+                                if (!origin.containsKey(idx)) origin[idx] = blocks[idx]
+                                blocks[idx] = newText
+                                if (!dirty) dirty = true
+                            }
+                        )
+                    }
+                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
         }
@@ -258,21 +310,12 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     if (askExit) {
         AlertDialog(
             onDismissRequest = { askExit = false },
-            title = { Text("还有没保存的修改") },
-            text = { Text("你修改了内容但没有保存。选择「不保存」会恢复成原来的样子，两个选择都会回到预览。") },
-            confirmButton = {
-                TextButton(onClick = { askExit = false; doSave(false) }) { Text("保存") }
-            },
+            title = { Text("还没保存") },
+            text = { Text("你修改了内容但没有保存。两个选择都会回到预览页。") },
+            confirmButton = { TextButton(onClick = { askExit = false; doSave() }) { Text("保存") } },
             dismissButton = {
                 Row {
-                    TextButton(onClick = {
-                        edits.clear()
-                        dirty = false
-                        editMode = false
-                        askExit = false
-                        generation++
-                        scope.launch { build() }
-                    }) { Text("不保存") }
+                    TextButton(onClick = { askExit = false; discard() }) { Text("不保存") }
                     TextButton(onClick = { askExit = false }) { Text("继续编辑") }
                 }
             }
@@ -311,73 +354,46 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     }
 }
 
+/**
+ * 一块文本：预览时是能选中的 Text，编辑时是输入框。
+ * 内容直接从内存取，不存在异步加载，也就不会闪“载入中”。
+ */
 @Composable
-private fun ChunkBlock(
+private fun TextBlock(
     index: Int,
-    count: Int,
-    start: Long,
-    end: Long,
-    file: File,
-    edits: MutableMap<Int, String>,
-    cache: android.util.LruCache<Int, String>,
-    generation: Int,
+    text: String,
     editable: Boolean,
-    onChanged: () -> Unit
+    onEdited: (String) -> Unit
 ) {
-    var value by remember(index, generation) { mutableStateOf<TextFieldValue?>(null) }
-
-    LaunchedEffect(index, generation) {
-        if (value == null) {
-            val text = edits[index] ?: cache.get(index) ?: withContext(Dispatchers.IO) {
-                readRange(file, start, end).also { cache.put(index, it) }
-            }
-            value = TextFieldValue(text)
-        }
-    }
-
-    Column(Modifier.fillMaxWidth()) {
-        if (count > 1) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("第 ${index + 1}/$count 段", fontSize = 9.sp, color = TextDim.copy(alpha = 0.7f))
-            }
-        }
-        val v = value
-        if (v == null) {
-            Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-                Text("载入中…", fontSize = 11.sp, color = TextDim)
-            }
-        } else if (!editable) {
-            androidx.compose.foundation.text.selection.SelectionContainer {
-                Text(
-                    v.text,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                    color = TextMain, fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace, lineHeight = 19.sp
-                )
-            }
-        } else {
-            BasicTextField(
-                value = v,
-                onValueChange = { nv ->
-                    value = nv
-                    edits[index] = nv.text
-                    onChanged()
-                },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp),
-                textStyle = TextStyle(
-                    color = TextMain, fontSize = 13.sp,
-                    fontFamily = FontFamily.Monospace, lineHeight = 19.sp
-                ),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(BrandBlue)
+    if (!editable) {
+        SelectionContainer {
+            Text(
+                text,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
+                color = TextMain, fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 19.sp
             )
         }
+    } else {
+        var value by remember(index) { mutableStateOf(TextFieldValue(text)) }
+        LaunchedEffect(text) {
+            if (value.text != text) value = TextFieldValue(text)
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = { nv ->
+                value = nv
+                onEdited(nv.text)
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 1.dp),
+            textStyle = TextStyle(
+                color = TextMain, fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace, lineHeight = 19.sp
+            ),
+            cursorBrush = SolidColor(BrandBlue)
+        )
     }
 }
-
-/* ---------------- 工具 ---------------- */
 
 private fun sampleLooksText(f: File): Boolean {
     if (f.length() == 0L) return true
@@ -390,105 +406,11 @@ private fun sampleLooksText(f: File): Boolean {
             var i = 0
             while (i < n) {
                 val b = buf[i].toInt() and 0xFF
-                if (b == 0) { bad += 8 }
+                if (b == 0) bad += 8
                 else if (b < 9 || b in 14..31) bad++
                 i++
             }
             bad.toDouble() / n < 0.02
         }
     } catch (_: Throwable) { true }
-}
-
-/** 按行边界切段，保证不会把中文/emoji 的字节劈成两半 */
-private fun buildBounds(f: File, chunk: Long): LongArray? {
-    val list = ArrayList<Long>()
-    list.add(0L)
-    var since = 0L
-    try {
-        FileInputStream(f).use { ins ->
-            val buf = ByteArray(256 * 1024)
-            var pos = 0L
-            while (true) {
-                val r = ins.read(buf)
-                if (r <= 0) break
-                var i = 0
-                while (i < r) {
-                    if (buf[i] == '\n'.code.toByte()) {
-                        val abs = pos + i + 1
-                        if (abs - since >= chunk) {
-                            list.add(abs)
-                            since = abs
-                        }
-                    }
-                    i++
-                }
-                pos += r
-            }
-        }
-    } catch (_: Throwable) { return null }
-    val len = f.length()
-    if (list[list.size - 1] != len) list.add(len)
-    return list.toLongArray()
-}
-
-private fun readRange(f: File, start: Long, end: Long): String {
-    val len = (end - start).coerceAtLeast(0).toInt()
-    if (len == 0) return ""
-    return try {
-        RandomAccessFile(f, "r").use { raf ->
-            raf.seek(start)
-            val buf = ByteArray(len)
-            var off = 0
-            while (off < len) {
-                val r = raf.read(buf, off, len - off)
-                if (r <= 0) break
-                off += r
-            }
-            String(buf, 0, off, Charsets.UTF_8)
-        }
-    } catch (_: Throwable) {
-        ""
-    }
-}
-
-private suspend fun saveChunked(
-    file: File,
-    bounds: LongArray,
-    edits: Map<Int, String>
-): Result<Unit> = withContext(Dispatchers.IO) {
-    var tmp: File? = null
-    try {
-        val dir = file.absoluteFile.parentFile ?: throw IllegalStateException("找不到上级目录")
-        tmp = File(dir, "." + file.name + ".lgsave" + Random().nextInt(9999))
-        RandomAccessFile(file, "r").use { src ->
-            java.io.BufferedOutputStream(java.io.FileOutputStream(tmp), 512 * 1024).use { out ->
-                val buf = ByteArray(256 * 1024)
-                for (i in 0 until bounds.size - 1) {
-                    val e = edits[i]
-                    if (e != null) {
-                        out.write(e.toByteArray(Charsets.UTF_8))
-                    } else {
-                        src.seek(bounds[i])
-                        var rem = bounds[i + 1] - bounds[i]
-                        while (rem > 0) {
-                            val want = minOf(rem, buf.size.toLong()).toInt()
-                            val r = src.read(buf, 0, want)
-                            if (r <= 0) break
-                            out.write(buf, 0, r)
-                            rem -= r
-                        }
-                    }
-                }
-            }
-        }
-        val t = tmp
-        if (!t.renameTo(file)) {
-            t.copyTo(file, overwrite = true)
-            t.delete()
-        }
-        Result.success(Unit)
-    } catch (th: Throwable) {
-        try { tmp?.delete() } catch (_: Throwable) {}
-        Result.failure(th)
-    }
 }
