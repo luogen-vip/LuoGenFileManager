@@ -225,9 +225,13 @@ fun itemColor(item: FileItem): Color {
 }
 
 object Thumbs {
+    // 按“字节”计量的缓存：以前默认每条算 1 个，能塞进几万张大图，翻十几张照片就开始 GC 卡顿
     private val cache = object : LruCache<String, ImageBitmap>(
-        (Runtime.getRuntime().maxMemory() / 1024 / 8).toInt()
-    ) {}
+        (Runtime.getRuntime().maxMemory() / 8 / 1024).toInt()
+    ) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int =
+            (value.width * value.height * 4L / 1024L).toInt().coerceAtLeast(1)
+    }
     private val failed = HashSet<String>()
 
     fun peek(key: String): ImageBitmap? = cache.get(key)
@@ -307,8 +311,11 @@ object AppIcons {
         cache.get((item.packageName.ifEmpty { item.path }) + "@" + size)
 
     private val cache = object : LruCache<String, ImageBitmap>(
-        (Runtime.getRuntime().maxMemory() / 1024 / 16).toInt()
-    ) {}
+        (Runtime.getRuntime().maxMemory() / 16 / 1024).toInt()
+    ) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int =
+            (value.width * value.height * 4L / 1024L).toInt().coerceAtLeast(1)
+    }
 
     suspend fun load(ctx: Context, item: FileItem, size: Int = 128): ImageBitmap? {
         val key = (item.packageName.ifEmpty { item.path }) + "@" + size

@@ -49,6 +49,11 @@ import java.io.File
 fun TextViewerScreen(nav: NavStack, path: String) {
     val ctx = LocalContext.current
     val file = remember(path) { File(path) }
+    // 大文件走分块编辑器：能看也能改，不会因为字数多把主线程卡死
+    if (remember(path) { File(path).length() > 64L * 1024 }) {
+        ChunkEditorScreen(nav, path)
+        return
+    }
     var text by remember(path) { mutableStateOf("") }
     var original by remember(path) { mutableStateOf("") }
     var editing by remember(path) { mutableStateOf(false) }
@@ -287,7 +292,7 @@ fun TextViewerScreen(nav: NavStack, path: String) {
 }
 
 @Composable
-private fun DocAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+internal fun DocAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     Column(
         Modifier.clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
