@@ -13,6 +13,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -563,4 +564,111 @@ fun fmtTime(ms: Long): String {
     val m = (total % 3600) / 60
     val s = total % 60
     return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+}
+
+/**
+ * 外部应用交给我们的视频：直接把原始 content:// 地址丢给播放器，
+ * 不复制、不额外占空间，几百 MB 也是点开就播。想留下再看可以点「保存到下载」。
+ */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+@Composable
+fun ExternalVideoScreen(nav: NavStack, uriString: String, name: String) {
+    val ctx = LocalContext.current
+    val uri = remember(uriString) { Uri.parse(uriString) }
+    var toast by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var playing by remember { mutableStateOf(false) }
+    var chrome by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    val player = remember { ExoPlayer.Builder(ctx).build() }
+
+    DisposableEffect(Unit) {
+        val l = object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                toast = "这个视频播不了：${error.errorCodeName}"
+            }
+        }
+        player.addListener(l)
+        onDispose {
+            player.removeListener(l)
+            player.release()
+        }
+    }
+
+    LaunchedEffect(uriString) {
+        try {
+            player.setMediaItem(MediaItem.fromUri(uri))
+            player.prepare()
+            player.playWhenReady = true
+        } catch (t: Throwable) {
+            toast = "这个视频打不开：${t.message ?: t.javaClass.simpleName}"
+        }
+    }
+
+    fun saveToDownloads() {
+        if (saving) return
+        saving = true
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                try {
+                    val dir = android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_DOWNLOADS
+                    )
+                    dir.mkdirs()
+                    val f = com.luogen.filehub.data.ExternalOpen.uniquePublic(dir, name)
+                    val ins = ctx.contentResolver.openInputStream(uri) ?: return@withContext false
+                    ins.use { i -> f.outputStream().use { o -> i.copyTo(o, 256 * 1024) } }
+                    com.luogen.filehub.data.MediaWatcher.scheduleNotify()
+                    true
+                } catch (_: Throwable) { false }
+            }
+            saving = false
+            toast = if (ok) "已保存到「下载」：$name" else "保存失败（可能没有存储权限）"
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        AndroidView(
+            factory = { c -> PlayerView(c).apply { useController = true; this.player = player } },
+            modifier = Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { chrome = !chrome } },
+            update = { it.player = player }
+        )
+        if (chrome) {
+            Row(
+                Modifier.fillMaxWidth().background(Color(0x99000000))
+                    .padding(horizontal = 6.dp, vertical = 8.dp).align(Alignment.TopStart),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { nav.pop() }) {
+                    Icon(Icons.Filled.ArrowBack, null, tint = Color.White)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(name, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("直接播放原文件 · 不复制", color = Color(0xFFAAAAAA), fontSize = 10.sp)
+                }
+                if (saving) {
+                    Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    }
+                } else {
+                    IconButton(onClick = { saveToDownloads() }) {
+                        Icon(Icons.Filled.Download, null, tint = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    toast?.let {
+        AlertDialog(
+            onDismissRequest = { toast = null },
+            title = { Text("提示") },
+            text = { Text(it) },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("知道了") } }
+        )
+    }
 }

@@ -41,6 +41,7 @@ fun AppNav(ctx: Context, nav: NavStack) {
         is Screen.ImageView -> ImageViewerScreen(nav, s.paths, s.start)
         is Screen.VideoView -> VideoViewerScreen(nav, s.paths, s.start)
         is Screen.AudioView -> AudioViewerScreen(nav, s.paths, s.start)
+        is Screen.ExternalVideo -> ExternalVideoScreen(nav, s.uri, s.name)
         is Screen.TextView -> TextViewerScreen(nav, s.path)
         is Screen.PdfView -> PdfViewerScreen(nav, s.path)
         is Screen.ArchiveView -> ArchiveViewerScreen(ctx, nav, s.path)
@@ -55,6 +56,7 @@ fun AppNav(ctx: Context, nav: NavStack) {
 /** 这个页面的内容是不是来自「外部打开」的缓存副本 */
 private fun refsExternalCache(ctx: Context, s: Screen): Boolean {
     val dir = com.luogen.filehub.data.ExternalOpen.dir(ctx).absolutePath + java.io.File.separator
+    if (s is Screen.ExternalVideo) return true
     val p = when (s) {
         is Screen.ImageView -> s.paths.firstOrNull()
         is Screen.VideoView -> s.paths.firstOrNull()

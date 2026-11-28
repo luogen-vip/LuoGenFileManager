@@ -151,8 +151,19 @@ class MainActivity : ComponentActivity() {
      */
     private fun startExternalOpen(req: OpenReq) {
         handledIntentUri = req.uri.toString()
+        // 视频直接交给播放器读原始地址：几百 MB 的视频不用复制一份，点开就播
+        val nameLow = req.name.lowercase()
+        val isVideo = req.mime.startsWith("video/") ||
+            nameLow.endsWith(".mp4") || nameLow.endsWith(".mkv") || nameLow.endsWith(".webm") ||
+            nameLow.endsWith(".mov") || nameLow.endsWith(".avi") || nameLow.endsWith(".3gp") ||
+            nameLow.endsWith(".m4v") || nameLow.endsWith(".flv") || nameLow.endsWith(".ts") ||
+            nameLow.endsWith(".m3u8")
         // 立刻给一个“收到了”的反馈：能看见这句，就说明系统确实把文件交给我们了
         toast("正在打开：${req.name}")
+        if (isVideo) {
+            AppState.nav.push(Screen.ExternalVideo(req.uri.toString(), req.name))
+            return
+        }
         AppState.externalBusy = req.name
         extScope.launch {
             val eo = com.luogen.filehub.data.ExternalOpen
@@ -385,6 +396,8 @@ sealed class Screen {
     data class ImageView(val paths: List<String>, val start: Int) : Screen()
     data class VideoView(val paths: List<String>, val start: Int) : Screen()
     data class AudioView(val paths: List<String>, val start: Int) : Screen()
+    /** 视频直接播放外部传来的 content:// 地址，不复制、不占空间 */
+    data class ExternalVideo(val uri: String, val name: String) : Screen()
     data class TextView(val path: String) : Screen()
     data class PdfView(val path: String) : Screen()
     data class ArchiveView(val path: String) : Screen()
@@ -405,6 +418,7 @@ private fun Screen.route(): String = when (this) {
     is Screen.ImageView -> "image|" + enc(paths.getOrNull(start) ?: paths.firstOrNull().orEmpty())
     is Screen.VideoView -> "video|" + enc(paths.getOrNull(start) ?: paths.firstOrNull().orEmpty())
     is Screen.AudioView -> "audio|" + start
+    is Screen.ExternalVideo -> "extvideo|" + enc(uri) + "|" + enc(name)
     is Screen.TextView -> "text|" + enc(path)
     is Screen.PdfView -> "pdf|" + enc(path)
     is Screen.ArchiveView -> "archive|" + enc(path)
@@ -438,6 +452,10 @@ private fun routeToScreen(route: String): Screen? {
         }
         "video" -> path(1)?.let { File(it) }?.takeIf { it.exists() && it.isFile }?.let {
             Screen.VideoView(listOf(it.absolutePath), 0)
+        }
+        "extvideo" -> {
+            val u = path(1)
+            if (u == null) null else Screen.ExternalVideo(u, path(2) ?: "视频")
         }
         "audio" -> {
             val hub = com.luogen.filehub.data.AudioHub

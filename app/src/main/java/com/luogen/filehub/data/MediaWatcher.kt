@@ -114,7 +114,7 @@ object MediaWatcher {
         fileObservers.clear()
     }
 
-    private fun scheduleNotify() {
+    fun scheduleNotify() {
         handler.removeCallbacks(notifyRunnable)
         handler.postDelayed(notifyRunnable, 450L)
     }

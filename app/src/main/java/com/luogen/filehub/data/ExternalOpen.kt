@@ -42,6 +42,21 @@ object ExternalOpen {
         return null
     }
 
+    /** 在某个公开目录里取一个不重名的文件（a.mp4 → a (2).mp4） */
+    fun uniquePublic(dir: File, name: String): File {
+        val base = name.substringBeforeLast('.', name)
+        val ext = name.substringAfterLast('.', "")
+        var f = File(dir, name)
+        var i = 2
+        while (f.exists()) {
+            val n = if (ext.isEmpty()) "$base ($i)" else "$base ($i).$ext"
+            f = File(dir, n)
+            i++
+            if (i > 999) break
+        }
+        return f
+    }
+
     /** 传进来的 mime 可能为空，用后缀兜底 */
     fun guessMime(name: String, mime: String): String {
         if (mime.isNotBlank() && mime != "application/octet-stream") return mime
