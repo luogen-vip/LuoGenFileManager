@@ -8,6 +8,7 @@ import android.os.Environment
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,16 +20,25 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,22 +50,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.luogen.filehub.data.TypeDetect
+import com.luogen.filehub.model.Cat
+import com.luogen.filehub.model.FileItem
 import com.luogen.filehub.model.toSizeText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * 别的 App 点「选择文件 / 上传」时，选到「罗根文件管家」后进入的就是这里：
- * 用我们自己的文件界面去挑，选完把文件交给对方。
- *
- * 单选用 FileProvider 的 content:// 地址，多选用 ClipData；只给临时读权限，用完即失效。
+ * 别的 App 点「选择文件 / 上传」时，选到「罗根文件管家」进入的就是这里：
+ * 用我们自己的文件界面挑文件，挑完把 content:// 交给对方。
+ * 图片、视频直接显示缩略图，能切分类（图片/视频/音频/文档/压缩包），可网格可列表，可搜当前文件夹。
  */
 class PickActivity : androidx.activity.ComponentActivity() {
 
@@ -67,7 +81,7 @@ class PickActivity : androidx.activity.ComponentActivity() {
         allowMultiple = intent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) ?: false
         mimeTypes = collectTypes(intent)
         setContent {
-            MaterialTheme {
+            AppTheme {
                 PickScreen(
                     mimeTypes = mimeTypes,
                     multiple = allowMultiple,
@@ -134,6 +148,74 @@ class PickActivity : androidx.activity.ComponentActivity() {
     }
 }
 
+/* ------------------------------ 界面 ------------------------------ */
+
+private class PickTab(val label: String, val test: (String) -> Boolean)
+
+private val TABS = listOf(
+    PickTab("全部") { true },
+    PickTab("图片") { it.startsWith("image/") },
+    PickTab("视频") { it.startsWith("video/") },
+    PickTab("音频") { it.startsWith("audio/") },
+    PickTab("文档") { it.startsWith("text/") || it.contains("word") || it.contains("excel") || it.contains("sheet") || it.contains("presentation") || it.contains("pdf") || it == "application/json" || it == "application/xml" },
+    PickTab("压缩包") { it.contains("zip") || it.contains("rar") || it.contains("7z") || it.contains("tar") || it.contains("compress") || it.contains("x-gzip") }
+)
+
+private fun mimeAllowed(mime: String, patterns: List<String>): Boolean = patterns.any { p ->
+    when {
+        p == "*/*" -> true
+        p.endsWith("/*") -> mime.startsWith(p.removeSuffix("*"))
+        else -> mime == p
+    }
+}
+
+private class Entry(val file: File, val item: FileItem, val cat: Cat)
+
+private fun entryOf(f: File): Entry {
+    val mime = if (f.isDirectory) "" else TypeDetect.mimeOf(f.name)
+    return Entry(
+        f,
+        FileItem(
+            path = f.absolutePath,
+            name = f.name,
+            size = f.length(),
+            modified = f.lastModified(),
+            isDir = f.isDirectory,
+            mime = mime
+        ),
+        TypeDetect.catOf(f.name, mime, f.isDirectory)
+    )
+}
+
+private fun readDir(dir: File, patterns: List<String>, tab: PickTab): List<Entry> {
+    val all = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Throwable) { emptyList() }
+    return all.filter { !it.name.startsWith(".") }
+        .filter { f -> f.isDirectory || (mimeAllowed(TypeDetect.mimeOf(f.name), patterns) && tab.test(TypeDetect.mimeOf(f.name))) }
+        .map { entryOf(it) }
+        .sortedWith(compareBy({ !it.file.isDirectory }, { it.file.name.lowercase() }))
+}
+
+private fun searchDir(root: File, keyword: String, patterns: List<String>, tab: PickTab): List<Entry> {
+    val key = keyword.lowercase()
+    val out = ArrayList<Entry>()
+    fun walk(dir: File, depth: Int) {
+        if (depth > 5 || out.size >= 300) return
+        val list = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Throwable) { emptyList() }
+        for (f in list) {
+            if (out.size >= 300) return
+            if (f.name.startsWith(".")) continue
+            if (f.isDirectory) {
+                walk(f, depth + 1)
+            } else {
+                val mime = TypeDetect.mimeOf(f.name)
+                if (f.name.lowercase().contains(key) && mimeAllowed(mime, patterns) && tab.test(mime)) out.add(entryOf(f))
+            }
+        }
+    }
+    walk(root, 0)
+    return out.sortedBy { it.file.name.lowercase() }
+}
+
 @Composable
 private fun PickScreen(
     mimeTypes: List<String>,
@@ -143,143 +225,255 @@ private fun PickScreen(
 ) {
     val root = remember { Environment.getExternalStorageDirectory() }
     var dir by remember { mutableStateOf(root) }
-    var files by remember { mutableStateOf<List<File>>(emptyList()) }
+    var tabIndex by remember { mutableStateOf(0) }
+    var grid by remember { mutableStateOf(false) }
+    var keyword by remember { mutableStateOf("") }
+    var entries by remember { mutableStateOf<List<Entry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var selected by remember { mutableStateOf<List<File>>(emptyList()) }
-    val acceptAll = mimeTypes.any { it == "*/*" }
 
-    LaunchedEffect(dir, mimeTypes) {
+    val tabs = remember(mimeTypes) { TABS.filter { t -> t.label == "全部" || mimeTypes.any { m -> t.test(m) } } }
+    val tab = tabs.getOrNull(tabIndex) ?: tabs.first()
+
+    // 只允许图片/视频时默认网格，更好挑
+    LaunchedEffect(tabs.size) {
+        grid = tabs.size in 2..3 && tabs.any { it.label == "图片" || it.label == "视频" }
+    }
+
+    LaunchedEffect(dir, keyword, tabIndex, mimeTypes) {
         loading = true
-        files = withContext(Dispatchers.IO) {
-            val all = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Throwable) { emptyList() }
-            all.filter { it.name.startsWith(".").not() }
-                .filter { it.isDirectory || acceptAll || matches(it, mimeTypes) }
-                .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
+        entries = withContext(Dispatchers.IO) {
+            if (keyword.isBlank()) readDir(dir, mimeTypes, tab) else searchDir(dir, keyword, mimeTypes, tab)
         }
         loading = false
     }
 
     BackHandler {
-        if (dir.absolutePath != root.absolutePath && dir.parentFile != null) {
-            dir = dir.parentFile!!
-            selected = emptyList()
-        } else {
-            onCancel()
+        when {
+            keyword.isNotBlank() -> keyword = ""
+            dir.absolutePath != root.absolutePath && dir.parentFile != null -> dir = dir.parentFile!!
+            else -> onCancel()
         }
     }
 
     Surface(Modifier.fillMaxSize(), color = BgDeep) {
         Column(Modifier.fillMaxSize()) {
-            // 顶部：取消 / 当前目录 / 完成
+            // 顶部栏
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { onCancel() }) { Text("取消", color = TextDim) }
-                Column(Modifier.weight(1f)) {
+                TextButton(onClick = { onCancel() }) { Text("取消", color = TextDim, fontSize = 14.sp) }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         if (dir.absolutePath == root.absolutePath) "手机存储" else dir.name.ifEmpty { "手机存储" },
-                        fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextMain,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                        fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        if (selected.isEmpty()) "选一个文件" else "已选 ${selected.size} 个",
-                        fontSize = 11.sp, color = TextDim
+                        if (selected.isEmpty()) (if (multiple) "可多选" else "选一个文件") else "已选 ${selected.size} 个",
+                        fontSize = 11.sp, color = if (selected.isEmpty()) TextDim else BrandBlue
                     )
                 }
-                TextButton(
-                    onClick = { onConfirm(selected) },
-                    enabled = selected.isNotEmpty()
-                ) {
+                TextButton(onClick = { if (selected.isNotEmpty()) onConfirm(selected) }, enabled = selected.isNotEmpty()) {
                     Text(
-                        if (multiple) "完成" else "选择",
+                        if (selected.isEmpty()) "选择" else "完成",
                         color = if (selected.isEmpty()) TextDim else BrandBlue,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold, fontSize = 14.sp
                     )
                 }
             }
 
-            // 路径：可点回上层
+            // 分类 + 视图切换
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (dir.absolutePath != root.absolutePath && dir.parentFile != null) {
-                    IconButton(onClick = { dir = dir.parentFile!!; selected = emptyList() }, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Filled.ArrowBack, "上一级", tint = TextDim, modifier = Modifier.size(18.dp))
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    tabs.forEachIndexed { i, t ->
+                        val on = i == tabIndex
+                        Text(
+                            t.label, fontSize = 12.sp,
+                            color = if (on) Color.White else TextDim,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (on) BrandBlue else SurfaceDark)
+                                .clickable { tabIndex = i }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
                     }
+                }
+                IconButton(onClick = { grid = !grid }, modifier = Modifier.size(34.dp)) {
+                    Icon(if (grid) Icons.Filled.ViewList else Icons.Filled.GridView, "切换视图", tint = TextDim, modifier = Modifier.size(20.dp))
+                }
+            }
+
+            // 路径 + 返回上一级
+            Row(
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { if (dir.absolutePath != root.absolutePath && dir.parentFile != null) dir = dir.parentFile!! },
+                    enabled = dir.absolutePath != root.absolutePath && dir.parentFile != null,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(Icons.Filled.ArrowBack, "上一级", tint = if (dir.absolutePath == root.absolutePath) BorderSoft else TextDim, modifier = Modifier.size(16.dp))
                 }
                 Text(
                     dir.absolutePath.removePrefix(root.absolutePath).ifEmpty { "/" },
-                    fontSize = 11.sp, color = TextDim,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    fontSize = 11.sp, color = TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            // 搜索框
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(SurfaceDark)
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Search, null, tint = TextDim, modifier = Modifier.size(17.dp))
+                Spacer(Modifier.width(6.dp))
+                androidx.compose.foundation.text.BasicTextField(
+                    value = keyword,
+                    onValueChange = { keyword = it },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = TextMain),
+                    modifier = Modifier.weight(1f).padding(vertical = 9.dp),
+                    decorationBox = { inner ->
+                        if (keyword.isEmpty()) Text("在当前文件夹搜索…", fontSize = 13.sp, color = TextDim)
+                        inner()
+                    }
+                )
+                if (keyword.isNotEmpty()) {
+                    Icon(Icons.Filled.Close, "清空", tint = TextDim, modifier = Modifier.size(16.dp).clickable { keyword = "" })
+                }
             }
 
             Box(Modifier.fillMaxSize()) {
                 when {
                     loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = BrandBlue)
+                        CircularProgressIndicator(color = BrandBlue, strokeWidth = 2.dp, modifier = Modifier.size(26.dp))
                     }
-                    files.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("这个文件夹里没有可选择的文件", color = TextDim, fontSize = 13.sp)
+                    entries.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            if (keyword.isNotBlank()) "没找到匹配的文件" else "这个文件夹里没有可选的文件",
+                            color = TextDim, fontSize = 13.sp
+                        )
+                    }
+                    grid -> LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(count = entries.size) { i ->
+                            val e = entries[i]
+                            GridCell(
+                                e = e,
+                                selected = selected.any { it.absolutePath == e.file.absolutePath },
+                                onClick = {
+                                    if (e.file.isDirectory) {
+                                        dir = e.file; keyword = ""
+                                    } else if (multiple) {
+                                        selected = if (selected.any { it.absolutePath == e.file.absolutePath })
+                                            selected.filter { it.absolutePath != e.file.absolutePath } else selected + e.file
+                                    } else {
+                                        selected = listOf(e.file)
+                                    }
+                                }
+                            )
+                        }
+                        item { Spacer(Modifier.height(80.dp)) }
                     }
                     else -> LazyColumn(Modifier.fillMaxSize()) {
-                        items(count = files.size, key = { files[it].absolutePath }) { i ->
-                            val f = files[i]
-                            val isSel = selected.any { it.absolutePath == f.absolutePath }
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(if (isSel) BrandBlue.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent)
-                                    .clickable {
-                                        if (f.isDirectory) {
-                                            dir = f
-                                            selected = emptyList()
-                                        } else if (multiple) {
-                                            selected = if (isSel) selected.filter { it.absolutePath != f.absolutePath }
-                                            else selected + f
-                                        } else {
-                                            selected = listOf(f)
-                                        }
+                        items(count = entries.size, key = { entries[it].file.absolutePath }) { i ->
+                            val e = entries[i]
+                            val isSel = selected.any { it.absolutePath == e.file.absolutePath }
+                            FileRow(
+                                item = e.item,
+                                selected = isSel,
+                                selectionMode = multiple,
+                                onClick = {
+                                    if (e.file.isDirectory) {
+                                        dir = e.file; keyword = ""
+                                    } else if (multiple) {
+                                        selected = if (isSel) selected.filter { it.absolutePath != e.file.absolutePath } else selected + e.file
+                                    } else {
+                                        selected = listOf(e.file)
                                     }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    if (f.isDirectory) Icons.Filled.Folder else Icons.Filled.InsertDriveFile,
-                                    null,
-                                    tint = if (f.isDirectory) WarnAmber else BrandBlue,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Spacer(Modifier.size(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(f.name, fontSize = 14.sp, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        if (f.isDirectory) "文件夹" else f.length().toSizeText(),
-                                        fontSize = 11.sp, color = TextDim
-                                    )
-                                }
-                                if (isSel) {
-                                    Icon(Icons.Filled.Check, "已选", tint = BrandBlue, modifier = Modifier.size(20.dp))
-                                }
-                            }
+                                },
+                                onLongClick = {
+                                    if (!multiple) return@FileRow
+                                    selected = if (isSel) selected.filter { it.absolutePath != e.file.absolutePath } else selected + e.file
+                                },
+                                trailing = if (multiple) null else if (isSel) {
+                                    { Icon(Icons.Filled.Check, "已选", tint = BrandBlue, modifier = Modifier.size(20.dp)) }
+                                } else null
+                            )
                         }
-                        item { Spacer(Modifier.height(24.dp)) }
+                        item { Spacer(Modifier.height(80.dp)) }
                     }
+                }
+            }
+        }
+
+        // 多选时底部确认条
+        if (multiple && selected.isNotEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp)
+                        .clip(RoundedCornerShape(16.dp)).background(BrandBlue)
+                        .clickable { onConfirm(selected) }
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("已选 ${selected.size} 个", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("清空", color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, modifier = Modifier.clickable { selected = emptyList() }.padding(horizontal = 10.dp))
+                    Text("完成", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
 
-private fun matches(f: File, types: List<String>): Boolean {
-    val mime = TypeDetect.mimeOf(f.name)
-    return types.any { t ->
-        when {
-            t == "*/*" -> true
-            t.endsWith("/*") -> mime.startsWith(t.removeSuffix("*"))
-            else -> mime == t
+@Composable
+private fun GridCell(e: Entry, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) BrandBlue.copy(alpha = 0.12f) else SurfaceDark)
+            .border(if (selected) 2.dp else 0.dp, if (selected) BrandBlue else Color.Transparent, RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
+            when {
+                e.file.isDirectory -> Icon(Icons.Filled.Folder, null, tint = WarnAmber, modifier = Modifier.size(42.dp))
+                e.cat == Cat.IMAGE || e.cat == Cat.VIDEO -> ThumbBox(Modifier.fillMaxSize(), e.item, corner = 8)
+                else -> Icon(itemIcon(e.item), null, tint = catColor(e.cat), modifier = Modifier.size(36.dp))
+            }
+            if (e.cat == Cat.VIDEO && !e.file.isDirectory) {
+                Icon(Icons.Filled.PlayArrow, null, tint = Color.White, modifier = Modifier.size(26.dp).align(Alignment.Center))
+            }
+            if (selected) {
+                Box(
+                    Modifier.align(Alignment.TopEnd).padding(4.dp).size(20.dp)
+                        .clip(RoundedCornerShape(10.dp)).background(BrandBlue),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(14.dp)) }
+            }
         }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            e.file.name, fontSize = 11.sp, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            if (e.file.isDirectory) "文件夹" else e.file.length().toSizeText(),
+            fontSize = 10.sp, color = TextDim, maxLines = 1
+        )
     }
 }
