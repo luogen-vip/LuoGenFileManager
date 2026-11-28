@@ -90,6 +90,15 @@ class FileRepo(private val ctx: Context) {
     fun videos(): List<FileItem> = query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
     fun audios(): List<FileItem> = query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
 
+    /** 按 MIME 前缀取全机文件（选择页分类用），走索引，非常快 */
+    fun byMimePrefix(prefix: String, limit: Int = 4000): List<FileItem> = query(
+        MediaStore.Files.getContentUri("external"),
+        selection = "${MediaStore.MediaColumns.MIME_TYPE} LIKE ?",
+        selectionArgs = arrayOf("%s%%".format(prefix)),
+        sort = "${MediaStore.MediaColumns.DATE_MODIFIED} DESC",
+        limit = limit
+    )
+
     /** 所有文件（MediaStore 索引到的） */
     fun allMediaFiles(): List<FileItem> = query(MediaStore.Files.getContentUri("external"))
 

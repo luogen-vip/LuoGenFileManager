@@ -206,6 +206,59 @@ private fun readDir(dir: File, patterns: List<String>, tab: PickTab): List<Entry
         .sortedWith(compareBy({ !it.file.isDirectory }, { it.file.name.lowercase() }))
 }
 
+/** 分类页：先取 MediaStore 索引里的全部同类文件，再补一遍文件系统扫描，保证不漏 */
+private suspend fun mediaOfCategory(ctx: android.content.Context, tab: PickTab, patterns: List<String>): List<Entry> {
+    val repo = FileRepo(ctx)
+    val prefixes = when (tab.label) {
+        "图片" -> listOf("image/")
+        "视频" -> listOf("video/")
+        "音频" -> listOf("audio/")
+        "文档" -> listOf("text/", "application/")
+        "压缩包" -> listOf("application/")
+        else -> listOf("")
+    }
+    val seen = HashSet<String>()
+    val out = ArrayList<Entry>()
+    for (p in prefixes) {
+        val list = try { repo.byMimePrefix(p, 4000) } catch (_: Throwable) { emptyList() }
+        for (it in list) {
+            if (it.isDir) continue
+            val mime = it.mime.ifEmpty { TypeDetect.mimeOf(it.name) }
+            if (!mimeAllowed(mime, patterns) || !tab.test(mime)) continue
+            if (!seen.add(it.path)) continue
+            out.add(entryOf(File(it.path)))
+        }
+    }
+    return out.sortedByDescending { it.file.lastModified() }
+}
+
+/** 索引里没有的新文件（刚下载/刚解压）兜底扫一遍，只收同类文件 */
+private suspend fun scanOfCategory(root: File, tab: PickTab, patterns: List<String>, skip: MutableSet<String>): List<Entry> {
+    val out = ArrayList<Entry>()
+    val start = System.currentTimeMillis()
+    fun walk(dir: File, depth: Int) {
+        if (depth > 7 || out.size >= 2000) return
+        if (System.currentTimeMillis() - start > 6000) return
+        val path = dir.absolutePath
+        if (path.contains("/Android/data") || path.contains("/Android/obb")) return
+        val list = try { dir.listFiles()?.toList() ?: emptyList() } catch (_: Throwable) { emptyList() }
+        for (f in list) {
+            if (out.size >= 2000) return
+            if (f.name.startsWith(".")) continue
+            if (f.isDirectory) {
+                walk(f, depth + 1)
+            } else {
+                val mime = TypeDetect.mimeOf(f.name)
+                if (!tab.test(mime) || !mimeAllowed(mime, patterns)) continue
+                if (!skip.add(f.absolutePath)) continue
+                out.add(entryOf(f))
+            }
+        }
+    }
+    walk(root, 0)
+    return out.sortedByDescending { it.file.lastModified() }
+}
+
 /**
  * 搜索走系统的 MediaStore 索引（和 App 内搜索同一套），不再自己递归扫全盘，
  * 几万个文件也是瞬间出结果；没有结果时再兜底扫常用目录。
@@ -254,6 +307,7 @@ private fun PickScreen(
         if (open) TABS else TABS.filter { t -> t.label == "全部" || mimeTypes.any { m -> t.test(m) } }
     }
     val tab = tabs.getOrNull(tabIndex) ?: tabs.first()
+    val globalCat = tab.label != "全部" && keyword.isBlank()
 
     // 切到图片/视频分类自动用网格（用户手动切过视图就不再干预）
     var manualView by remember { mutableStateOf(false) }
@@ -264,14 +318,30 @@ private fun PickScreen(
     LaunchedEffect(dir, keyword, tabIndex, mimeTypes) {
         loading = true
         if (keyword.isNotBlank()) delay(220)   // 打字防抖，避免每敲一个字都查一次
-        entries = withContext(Dispatchers.IO) {
-            try {
-                if (keyword.isBlank()) readDir(dir, mimeTypes, tab) else searchFiles(ctx, keyword, mimeTypes, tab)
-            } catch (_: Throwable) {
-                emptyList()
+        val globalCat = keyword.isBlank() && tab.label != "全部"
+        if (globalCat) {
+            // 分类页：不按当前文件夹，直接列全机这一类的所有文件
+            entries = withContext(Dispatchers.IO) {
+                try { mediaOfCategory(ctx, tab, mimeTypes) } catch (_: Throwable) { emptyList() }
             }
+            loading = false
+            val have = entries.map { it.file.absolutePath }.toHashSet()
+            val extra = withContext(Dispatchers.IO) {
+                try { scanOfCategory(root, tab, mimeTypes, have) } catch (_: Throwable) { emptyList() }
+            }
+            if (extra.isNotEmpty()) {
+                entries = (entries + extra).sortedByDescending { it.file.lastModified() }
+            }
+        } else {
+            entries = withContext(Dispatchers.IO) {
+                try {
+                    if (keyword.isBlank()) readDir(dir, mimeTypes, tab) else searchFiles(ctx, keyword, mimeTypes, tab)
+                } catch (_: Throwable) {
+                    emptyList()
+                }
+            }
+            loading = false
         }
-        loading = false
     }
 
     val stateKey = "${dir.absolutePath}|$tabIndex|$keyword"
@@ -330,11 +400,11 @@ private fun PickScreen(
                 TextButton(onClick = { onCancel() }) { Text("取消", color = TextDim, fontSize = 14.sp) }
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        if (dir.absolutePath == root.absolutePath) "手机存储" else dir.name.ifEmpty { "手机存储" },
+                        if (globalCat) "全部${tab.label}" else if (dir.absolutePath == root.absolutePath) "手机存储" else dir.name.ifEmpty { "手机存储" },
                         fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        if (selected.isEmpty()) (if (multiple) "可多选" else "选一个文件") else "已选 ${selected.size} 个",
+                        if (selected.isEmpty()) (if (globalCat) "共 ${entries.size} 个" else if (multiple) "可多选" else "选一个文件") else "已选 ${selected.size} 个",
                         fontSize = 11.sp, color = if (selected.isEmpty()) TextDim else BrandBlue
                     )
                 }
@@ -374,8 +444,8 @@ private fun PickScreen(
                 }
             }
 
-            // 路径 + 返回上一级
-            Row(
+            // 路径 + 返回上一级（分类页是全机列表，不需要目录导航）
+            if (tab.label == "全部" || keyword.isNotBlank()) Row(
                 Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -424,7 +494,11 @@ private fun PickScreen(
                     }
                     entries.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            if (keyword.isNotBlank()) "没找到匹配的文件" else "这个文件夹里没有可选的文件",
+                            when {
+                                keyword.isNotBlank() -> "没找到匹配的文件"
+                                globalCat -> "手机里没有${tab.label}文件"
+                                else -> "这个文件夹里没有可选的文件"
+                            },
                             color = TextDim, fontSize = 13.sp
                         )
                     }
@@ -472,6 +546,7 @@ private fun PickScreen(
                                         selected = listOf(e.file)
                                     }
                                 },
+                                badge = if (globalCat) e.file.parentFile?.name else null,
                                 onLongClick = {
                                     if (!multiple) return@FileRow
                                     selected = if (isSel) selected.filter { it.absolutePath != e.file.absolutePath } else selected + e.file
