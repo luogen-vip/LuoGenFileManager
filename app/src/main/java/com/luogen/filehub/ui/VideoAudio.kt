@@ -356,21 +356,31 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             }
         }
 
-        Spacer(Modifier.height(26.dp))
-        // 固定两行高度：歌名再长也只占这么高，下面的进度条和按钮位置永远不动
-        Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
-            Text(
-                nameNoExt(File(currentPath).name),
-                fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+        Spacer(Modifier.height(22.dp))
+        // 标题区整体固定高度（歌名最多两行 + 信息行都算在里面）：
+        // 不管歌名一行还是两行，这里占的高度完全一样，下面的进度条和按钮永远不动
+        Box(Modifier.fillMaxWidth().height(88.dp), contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    nameNoExt(File(currentPath).name),
+                    fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    lineHeight = 24.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "${extOf(File(currentPath).name).uppercase()} · ${File(currentPath).length().toSizeText()} · ${index + 1}/${queuePaths.size}",
+                    color = TextDim, fontSize = 12.sp, maxLines = 1,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "${extOf(File(currentPath).name).uppercase()} · ${File(currentPath).length().toSizeText()} · ${index + 1}/${queuePaths.size}",
-            color = TextDim, fontSize = 12.sp
-        )
 
         Spacer(Modifier.height(18.dp))
         val shownPos = seekDrag?.let { (it * duration).toLong() } ?: pendingSeek ?: position

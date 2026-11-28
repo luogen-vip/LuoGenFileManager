@@ -97,6 +97,8 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
     var openInfo by remember { mutableStateOf(false) }
     var truncated by remember(path) { mutableStateOf(false) }
     var reloadKey by remember(path) { mutableStateOf(0) }
+    // 分块数量/结构变化时自增：让 LazyColumn 按新结构重建，避免访问已删除的下标
+    var structure by remember(path) { mutableStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
     var askClear by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -110,6 +112,7 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
         loaded = false
         loadError = null
         blocks.clear()
+        structure++
         withContext(Dispatchers.IO) {
             try {
                 binary = !sampleLooksText(file)
@@ -321,15 +324,18 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                             }
                         }
                     }
-                    items(count = blocks.size, key = { it }) { idx ->
+                    items(count = blocks.size, key = { "$structure#$it" }) { idx ->
+                        val piece = blocks.getOrNull(idx) ?: ""
                         TextBlock(
                             index = idx,
-                            text = blocks[idx],
+                            text = piece,
                             editable = editMode && !truncated,
                             onEdited = { newText ->
-                                if (!origin.containsKey(idx)) origin[idx] = blocks[idx]
-                                blocks[idx] = newText
-                                if (!dirty) dirty = true
+                                if (idx in blocks.indices) {
+                                    if (!origin.containsKey(idx)) origin[idx] = blocks[idx]
+                                    blocks[idx] = newText
+                                    if (!dirty) dirty = true
+                                }
                             }
                         )
                     }
@@ -349,9 +355,13 @@ fun ChunkEditorScreen(nav: NavStack, path: String) {
                     askClear = false
                     blocks.clear()
                     blocks.add("")
+                    structure++
+                    origin.clear()
                     editMode = true
                     dirty = true
-                    scope.launch { try { listState.scrollToItem(0) } catch (_: Throwable) {} }
+                    scope.launch {
+                        try { listState.scrollToItem(0) } catch (_: Throwable) {}
+                    }
                     toast = "已清空，可以重新写内容；点绿勾保存才会写进文件"
                 }) { Text("清空") }
             },
