@@ -33,6 +33,20 @@
         android:theme="@style/Theme.LuoGenFileManager"
         tools:targetApi="34">
 
+        <!-- 系统文件选择器（SAF）里的来源：别的应用上传/选文件时能看到「罗根文件管家」 -->
+        <provider
+            android:name=".provider.FileHubProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:enabled="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
         <activity
             android:name=".ui.MainActivity"
             android:launchMode="singleTop"
