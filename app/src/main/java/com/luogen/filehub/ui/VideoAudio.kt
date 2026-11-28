@@ -357,11 +357,15 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
         }
 
         Spacer(Modifier.height(26.dp))
-        Text(
-            nameNoExt(File(currentPath).name),
-            fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // 固定两行高度：歌名再长也只占这么高，下面的进度条和按钮位置永远不动
+        Box(Modifier.fillMaxWidth().height(52.dp), contentAlignment = Alignment.Center) {
+            Text(
+                nameNoExt(File(currentPath).name),
+                fontSize = 19.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Spacer(Modifier.height(6.dp))
         Text(
             "${extOf(File(currentPath).name).uppercase()} · ${File(currentPath).length().toSizeText()} · ${index + 1}/${queuePaths.size}",
@@ -457,6 +461,7 @@ fun AudioViewerScreen(nav: NavStack, paths: List<String>, start: Int) {
             queue = queuePaths,
             current = hub.index,
             playing = hub.playing,
+            pausedPath = hub.pausedAt,
             onPlay = { i ->
                 queueOpen = false
                 hub.playQueueAt(i, ctx)
@@ -487,6 +492,7 @@ private fun PlayQueueDialog(
     queue: List<String>,
     current: Int,
     playing: Boolean,
+    pausedPath: String?,
     onPlay: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onDismiss: () -> Unit
@@ -526,7 +532,8 @@ private fun PlayQueueDialog(
                                 Text(name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (i == current || i == picked) BrandBlue else Color.Unspecified)
                                 Text(if (i == picked) "正在切换…"
-                                    else if (i == current) (if (playing) "正在播放" else "已暂停")
+                                    else if (i == current && playing) "正在播放"
+                                    else if (queue[i] == pausedPath) "已暂停"
                                     else "第 ${i + 1} 首",
                                     fontSize = 10.sp, color = TextDim)
                             }

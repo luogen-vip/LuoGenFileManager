@@ -45,6 +45,8 @@ object AudioHub {
     var index by mutableStateOf(0)
         private set
     var playing by mutableStateOf(false)
+    /** 真正“暂停”的那首歌（按路径记，不按位置），删掉它就不会把暂停标记挪到别的歌上 */
+    var pausedAt by mutableStateOf<String?>(null)
         private set
     var position by mutableStateOf(0L)
         private set
@@ -73,6 +75,7 @@ object AudioHub {
                 .putLong("pos", player?.currentPosition ?: position)
                 .putBoolean("playing", player?.isPlaying == true)
                 .putInt("repeat", repeatMode)
+                .putString("pausedPath", pausedAt ?: "")
                 .apply()
         } catch (_: Throwable) {}
     }
@@ -105,6 +108,8 @@ object AudioHub {
         val wasPlaying = sp.getBoolean("playing", false)
         p.playWhenReady = wasPlaying
         playing = wasPlaying
+        val pp = sp.getString("pausedPath", "") ?: ""
+        pausedAt = if (pp.isNotEmpty() && playlist.contains(pp)) pp else null
         if (wasPlaying) startForegroundService()
     }
 
@@ -151,6 +156,8 @@ object AudioHub {
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
+                if (isPlaying) pausedAt = null
+                else if (p.mediaItemCount > 0) pausedAt = playlist.getOrNull(p.currentMediaItemIndex)
                 saveState()
                 pushState()
                 refreshNotification()
@@ -345,13 +352,16 @@ object AudioHub {
     fun removeAt(pos: Int) {
         if (pos !in playlist.indices) return
         val p = player
+        val removed = playlist[pos]
         playlist = playlist.toMutableList().also { it.removeAt(pos) }
+        if (pausedAt == removed) pausedAt = null
         applyRepeat()
         if (playlist.isEmpty()) {
             p?.clearMediaItems()
             p?.stop()
             index = 0
             playing = false
+            pausedAt = null
             clearSavedState()
             appCtx?.let { c ->
                 NotificationManagerCompatSafe.cancel(c)
