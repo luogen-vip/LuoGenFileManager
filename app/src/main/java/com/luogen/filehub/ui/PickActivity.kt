@@ -335,6 +335,7 @@ private fun PickScreen(
     val cache = remember { HashMap<String, List<Entry>>() }
     val scannedAt = remember { HashMap<String, Int>() }
     var version by remember { mutableStateOf(0) }
+    var loadedKey by remember { mutableStateOf("") }
 
     // 系统文件索引变化（下载/删除/移动/改名）立刻刷新；再加 2 秒轮询兜底
     DisposableEffect(Unit) {
@@ -387,6 +388,7 @@ private fun PickScreen(
                 try { searchFiles(ctx, keyword, mimeTypes, tab) } catch (_: Throwable) { emptyList() }
             }
             loading = false
+            loadedKey = key
             return@LaunchedEffect
         }
 
@@ -395,6 +397,7 @@ private fun PickScreen(
             // 有缓存：立刻显示，不转圈
             if (!sameList(cached, entries)) entries = cached
             loading = false
+            loadedKey = key
             delay(120)
         } else {
             loading = true
@@ -411,6 +414,7 @@ private fun PickScreen(
         if (fresh.isNotEmpty()) cache[key] = fresh
         if (!sameList(fresh, entries)) entries = fresh
         loading = false
+        loadedKey = key
 
         // 分类页：索引之外再补一遍扫描（同一版本只扫一次，切换分类不重复扫）
         if (tab.label != "全部" && scannedAt[key] != version) {
@@ -455,14 +459,21 @@ private fun PickScreen(
             .collect { (i, o) -> gridPos[stateKey] = intArrayOf(i, o) }
     }
     // 列表数据回来后，把上次离开时的位置还原（每次进入某个 key 只还原一次）
-    LaunchedEffect(loading, stateKey, entries.size) {
-        if (!loading && entries.isNotEmpty() && restoredKey != stateKey) {
+    LaunchedEffect(stateKey, loadedKey, entries.size, loading, grid) {
+        if (!loading && loadedKey == stateKey && entries.isNotEmpty() && restoredKey != stateKey) {
             val p = if (grid) gridPos[stateKey] else listPos[stateKey]
             if (p != null) {
                 val idx = p[0].coerceIn(0, entries.lastIndex)
-                try {
-                    if (grid) gridState.scrollToItem(idx, p[1]) else listState.scrollToItem(idx, p[1])
-                } catch (_: Throwable) {
+                var done = false
+                for (attempt in 0 until 3) {
+                    if (done) break
+                    done = try {
+                        if (grid) gridState.scrollToItem(idx, p[1]) else listState.scrollToItem(idx, p[1])
+                        true
+                    } catch (_: Throwable) {
+                        false
+                    }
+                    if (!done) delay(40L * (attempt + 1))
                 }
             }
             restoredKey = stateKey
