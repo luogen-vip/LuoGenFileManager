@@ -40,6 +40,12 @@ class FileHubProvider : DocumentsProvider() {
             Document.COLUMN_LAST_MODIFIED,
             Document.COLUMN_FLAGS
         )
+
+        /** 给别的 App 用的文件地址（SD 卡等 FileProvider 覆盖不到的路径走这里） */
+        fun uriFor(ctx: android.content.Context, f: File): android.net.Uri {
+            val id = Base64.encodeToString(f.absolutePath.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+            return DocumentsContract.buildDocumentUri(ctx.packageName + ".documents", id)
+        }
     }
 
     // ---------------- 编码 ----------------
@@ -256,6 +262,9 @@ class FileHubProvider : DocumentsProvider() {
         if (!f.renameTo(target)) throw FileNotFoundException("改名失败")
         return encode(target)
     }
+
+    // ---------------- 对外工具 ----------------
+
 
     // ---------------- 生命周期 ----------------
 

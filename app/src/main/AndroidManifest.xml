@@ -33,6 +33,27 @@
         android:theme="@style/Theme.LuoGenFileManager"
         tools:targetApi="34">
 
+        <!-- 别的 App 点“选择文件/上传”时，可以选「罗根文件管家」，进入我们自己的选择界面 -->
+        <activity
+            android:name=".ui.PickActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.LuoGenFileManager"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|density|fontScale|locale|layoutDirection|touchscreen|colorMode">
+            <intent-filter>
+                <action android:name="android.intent.action.GET_CONTENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.OPENABLE" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.OPEN_DOCUMENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.OPENABLE" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
         <!-- 系统文件选择器（SAF）里的来源：别的应用上传/选文件时能看到「罗根文件管家」 -->
         <provider
             android:name=".provider.FileHubProvider"
